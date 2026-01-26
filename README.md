@@ -25,7 +25,7 @@ python scripts/init-db.py
 - **OpenSearch Dashboards**: http://localhost:5601
 - **API Health**: http://localhost:8000/health
 
-## 🚀 What's New: Advanced Search
+## What's New: Advanced Search
 
 **Professional search interface with:**
 - Query syntax: `severity:high AND event_type:login_failure`
