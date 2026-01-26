@@ -52,6 +52,27 @@ export const resolveIncident = (incidentId, notes = null) => {
   return api.put(`/incidents/${incidentId}/resolve?${params.toString()}`)
 }
 
+// Advanced Search endpoints
+export const searchLogs = (query, hours = 24, limit = 100, offset = 0) => {
+  return api.get(`/search?q=${encodeURIComponent(query)}&hours=${hours}&limit=${limit}&offset=${offset}`)
+}
+
+export const getSearchSuggestions = () => {
+  return api.get('/search/suggestions')
+}
+
+export const saveSearch = (name, query, description = null) => {
+  const params = new URLSearchParams()
+  params.append('name', name)
+  params.append('query', query)
+  if (description) params.append('description', description)
+  return api.post(`/search/save?${params.toString()}`)
+}
+
+export const getSavedSearches = () => {
+  return api.get('/search/saved')
+}
+
 // Alerts endpoint
 export const getAlerts = (hours = 24, limit = 100) => {
   return api.get(`/alerts?hours=${hours}&limit=${limit}`)

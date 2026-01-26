@@ -4,6 +4,7 @@ import IncidentsPage from './components/Incidents'
 import AlertsPage from './components/Alerts'
 import LogsPage from './components/Logs'
 import RulesPage from './components/Rules'
+import { SearchPage } from './components/Search'
 import './index.css'
 
 export function App() {
@@ -13,6 +14,7 @@ export function App() {
     { id: 'dashboard', label: 'Dashboard', icon: '📊', color: 'text-blue-400' },
     { id: 'incidents', label: 'Incidents', icon: '🚨', color: 'text-red-400' },
     { id: 'alerts', label: 'Alerts', icon: '🔔', color: 'text-yellow-400' },
+    { id: 'search', label: 'Search', icon: '🔍', color: 'text-green-400' },
     { id: 'logs', label: 'Logs', icon: '📋', color: 'text-cyan-400' },
     { id: 'rules', label: 'Rules', icon: '⚙️', color: 'text-purple-400' },
   ]
@@ -25,6 +27,8 @@ export function App() {
         return <IncidentsPage />
       case 'alerts':
         return <AlertsPage />
+      case 'search':
+        return <SearchPage />
       case 'logs':
         return <LogsPage />
       case 'rules':

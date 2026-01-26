@@ -1,6 +1,8 @@
 # Mini SIEM - Security Information & Event Management Platform
 
-A modular, open-source SIEM built with Go, Python, OpenSearch, and React for real-time security event processing and threat detection.
+An **enterprise-grade SIEM platform** built with Go, Python, OpenSearch, and React for real-time security event processing, threat detection, and advanced threat hunting.
+
+**Now with Advanced Search** - Query your logs like you would in Splunk or ElasticSearch! 🔍
 
 ## Quick Start
 
@@ -11,24 +13,47 @@ A modular, open-source SIEM built with Go, Python, OpenSearch, and React for rea
 ### Start All Services
 
 ```bash
-docker-compose up --build
+docker-compose down
+docker-compose up --build -d
+Start-Sleep -Seconds 45
 python scripts/init-db.py
 ```
 
 ### Access the Dashboard
 - **Web UI**: http://localhost:3000
+- **Advanced Search** (NEW): Click 🔍 in navigation
 - **OpenSearch Dashboards**: http://localhost:5601
 - **API Health**: http://localhost:8000/health
-- **Syslog Server**: localhost:514/UDP
+
+## 🚀 What's New: Advanced Search
+
+**Professional search interface with:**
+- Query syntax: `severity:high AND event_type:login_failure`
+- Boolean operators: AND, OR, (grouping)
+- Wildcards: `host:prod-*`
+- Range queries: `destination_port:>8000`
+- Time expressions: `timestamp:1h ago`
+- Saved searches: Save and reuse favorite queries
+- Auto-complete: Field suggestions as you type
+- Enterprise UI: Professional dark theme
+
+**Try it:**
+```
+severity:high
+event_type:login_failure AND host:prod-*
+commandline:*powershell* AND severity:critical
+(user:admin OR user:root) AND timestamp:6h ago
+```
 
 ## Architecture
 
 ```
 [Log Sources] → [Syslog/API] → [Normalizer] → [OpenSearch]
                                                  ├→ [Detection Engine] → Alerts
-                                                 └→ [Correlation Engine] → Incidents
+                                                 ├→ [Correlation Engine] → Incidents
+                                                 └→ [Advanced Search] ← NEW!
                                                       ↓
-                                                 [React UI]
+                                                 [React UI - 6 Pages]
 ```
 
 ## Features Implemented ✅
@@ -38,7 +63,8 @@ python scripts/init-db.py
 - **Phase 3**: Log normalization (Windows, Linux, firewall)
 - **Phase 4**: Detection engine with Sigma-like YAML rules
 - **Phase 5**: Correlation engine for attack chains
-- **Phase 6**: React web UI with dashboard, incidents, rules
+- **Phase 6**: React web UI with dashboard, incidents, alerts, logs, rules
+- **Phase 7** ⭐ **NEW**: Advanced search with query syntax and saved searches
 
 ## Test Log Ingestion
 

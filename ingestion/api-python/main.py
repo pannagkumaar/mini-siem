@@ -12,6 +12,19 @@ import threading
 
 from parser.normalizer import normalize_log, validate_normalized_log
 
+# Import query parser - available in same directory as main.py
+QueryParser = None
+EXAMPLE_QUERIES = []
+QUERY_PARSER_ERROR = None
+
+try:
+    from query_parser import QueryParser as QP, EXAMPLE_QUERIES as EQ
+    QueryParser = QP
+    EXAMPLE_QUERIES = EQ
+except Exception as e:
+    import traceback
+    QUERY_PARSER_ERROR = f"Error loading query parser: {e}\n{traceback.format_exc()}"
+
 def generate_unique_incident_id(pattern_id: str, host: str = None, user: str = None) -> str:
     """
     Generate unique incident ID based on pattern and affected entities.
@@ -58,6 +71,15 @@ logger = logging.getLogger("ingestion-api")
 handler = logging.StreamHandler()
 handler.setFormatter(ColoredFormatter())
 logger.handlers = [handler]
+
+# Log query parser status
+if QueryParser:
+    logger.info("✓ Query parser loaded successfully")
+else:
+    if QUERY_PARSER_ERROR:
+        logger.error(QUERY_PARSER_ERROR)
+    else:
+        logger.warning("⚠ Query parser not available")
 
 # OpenSearch client
 OPENSEARCH_HOST = os.getenv("OPENSEARCH_HOST", "opensearch-node")
@@ -420,11 +442,11 @@ def get_recent_logs(hours: int = 24, limit: int = 100, event_type: str = None, s
         ]
         
         if event_type:
-            filters.append({"term": {"event_type.keyword": event_type}})
+            filters.append({"term": {"event_type": event_type}})
         if severity:
-            filters.append({"term": {"severity.keyword": severity}})
+            filters.append({"term": {"severity": severity}})
         if source:
-            filters.append({"term": {"source.keyword": source}})
+            filters.append({"term": {"source": source}})
         
         query = {
             "query": {
@@ -635,6 +657,195 @@ async def resolve_incident(incident_id: str, notes: str = None):
     except Exception as e:
         logger.error(f"Error resolving incident: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/search")
+def advanced_search(
+    q: str = None,
+    hours: int = 24,
+    limit: int = 100,
+    offset: int = 0,
+    sort_by: str = "timestamp",
+    sort_order: str = "desc"
+):
+    """
+    Advanced search with SIEM query syntax.
+    
+    Query examples:
+      - severity:high
+      - event_type:login_failure AND severity:high
+      - host:prod-* AND (user:admin OR user:root)
+      - timestamp:1h ago
+      - source_ip:192.168.* AND destination_port:443
+    """
+    logger.info(f"SEARCH ENDPOINT CALLED - Query: {q}")
+    
+    if not opensearch_client:
+        raise HTTPException(status_code=503, detail="OpenSearch not available")
+    
+    if not q:
+        raise HTTPException(status_code=400, detail="Query parameter 'q' is required")
+    
+    try:
+        # Parse advanced query
+        if QueryParser is None:
+            logger.error("QueryParser not available - falling back to simple search")
+            # Fallback: simple keyword search
+            query_dsl = {
+                "query": {
+                    "bool": {
+                        "must": [
+                            {"match_all": {}}
+                        ]
+                    }
+                }
+            }
+        else:
+            parser = QueryParser(q)
+            query_dsl = parser.parse()
+        
+        # Add time range filter
+        now = datetime.utcnow()
+        start_time = (now - timedelta(hours=hours)).isoformat() + "Z"
+        
+        # Merge time range into query - wrap non-bool queries in bool
+        if "bool" not in query_dsl.get("query", {}):
+            # If the query isn't already a bool query, wrap it
+            existing_query = query_dsl.get("query", {"match_all": {}})
+            query_dsl["query"] = {
+                "bool": {
+                    "must": [existing_query]
+                }
+            }
+        
+        # Ensure must array exists
+        if "must" not in query_dsl["query"].get("bool", {}):
+            query_dsl["query"]["bool"]["must"] = []
+        
+        # Add time range filter
+        query_dsl["query"]["bool"]["must"].append({
+            "range": {
+                "timestamp": {
+                    "gte": start_time,
+                    "lte": now.isoformat() + "Z"
+                }
+            }
+        })
+        
+        # Add sorting
+        query_dsl["sort"] = [{sort_by: {"order": sort_order}}]
+        query_dsl["from"] = offset
+        query_dsl["size"] = limit
+        
+        # Debug logging
+        logger.info(f"Advanced search - Query: {q}")
+        logger.info(f"Generated DSL: {json.dumps(query_dsl, indent=2)}")
+        
+        # Execute search
+        response = opensearch_client.search(index="logs", body=query_dsl)
+        
+        results = []
+        for hit in response["hits"]["hits"]:
+            log = hit["_source"]
+            log["_id"] = hit["_id"]
+            log["_score"] = hit.get("_score", 0)
+            results.append(log)
+        
+        return {
+            "query": q,
+            "results": results,
+            "count": len(results),
+            "total": response["hits"]["total"]["value"],
+            "took_ms": response["took"]
+        }
+    
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid query: {str(e)}")
+    except Exception as e:
+        logger.error(f"Search error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/search/suggestions")
+def get_search_suggestions():
+    """Get example queries and field suggestions for autocomplete"""
+    if QueryParser is None:
+        return {
+            "examples": [],
+            "fields": ["severity", "event_type", "source", "host", "user", "ip"],
+            "operators": ["AND", "OR"],
+            "comparisons": [">", "<"],
+            "syntax_help": {
+                "note": "Query parser not available"
+            }
+        }
+    
+    return {
+        "examples": EXAMPLE_QUERIES,
+        "fields": list(QueryParser.FIELD_MAPPING.keys()),
+        "operators": ["AND", "OR", "NOT"],
+        "comparisons": [">", ">=", "<", "<=", "="],
+        "wildcards": ["*", "?"],
+        "syntax_help": {
+            "basic": "field:value",
+            "wildcard": "field:prod-*",
+            "phrase": 'field:"exact phrase"',
+            "range": "field:>100",
+            "time": "timestamp:1h ago",
+            "logical": "AND, OR operators",
+            "grouping": "(condition1 OR condition2)",
+        }
+    }
+
+
+@app.post("/search/save")
+def save_search(name: str, query: str, description: str = None):
+    """Save a search query for later use"""
+    try:
+        doc = {
+            "name": name,
+            "query": query,
+            "description": description,
+            "created_at": datetime.utcnow().isoformat() + "Z",
+            "created_by": "system",
+            "usage_count": 0
+        }
+        
+        result = opensearch_client.index(index="saved_searches", body=doc)
+        
+        return {
+            "id": result["_id"],
+            "name": name,
+            "query": query,
+            "status": "saved"
+        }
+    except Exception as e:
+        logger.error(f"Error saving search: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/search/saved")
+def get_saved_searches():
+    """Get all saved searches"""
+    try:
+        query = {
+            "query": {"match_all": {}},
+            "size": 100,
+            "sort": [{"created_at": {"order": "desc"}}]
+        }
+        
+        response = opensearch_client.search(index="saved_searches", body=query)
+        
+        searches = []
+        for hit in response["hits"]["hits"]:
+            search = hit["_source"]
+            search["_id"] = hit["_id"]
+            searches.append(search)
+        
+        return {"searches": searches, "count": len(searches)}
+    except Exception as e:
+        logger.error(f"Error getting saved searches: {e}")
+        return {"searches": [], "count": 0}
 
 
 if __name__ == "__main__":
