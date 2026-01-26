@@ -1,0 +1,9 @@
+id: DET-009
+name: Anomalous Process Creation
+description: Detects creation of processes with unusual patterns or names
+condition:
+  event_type: process_create
+severity: medium
+mitre_tag:
+  - T1204
+  - T1566

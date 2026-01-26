@@ -1,0 +1,14 @@
+id: DET-001
+name: Suspicious PowerShell Execution
+description: Detects potentially suspicious PowerShell commands with encoded parameters
+condition:
+  source: windows
+  event_type: process_create
+  raw:
+    process_name:
+      contains: powershell
+    commandline:
+      contains: EncodedCommand
+severity: high
+mitre_tag:
+  - T1086

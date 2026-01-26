@@ -1,0 +1,8 @@
+id: DET-018
+name: Firewall Rule Change Detected
+description: Detects modifications to firewall rules and policies
+condition:
+  event_type: firewall_rule_change
+severity: high
+mitre_tag:
+  - T1562

@@ -1,0 +1,32 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply bg-gray-900 text-gray-100;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+.card {
+  @apply bg-gray-800 rounded-lg p-6 shadow-lg border border-gray-700;
+}
+
+.btn-primary {
+  @apply px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-white transition;
+}
+
+.btn-secondary {
+  @apply px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded text-white transition;
+}
+
+.metric {
+  @apply text-center;
+}
+
+.metric-value {
+  @apply text-3xl font-bold text-blue-400;
+}
+
+.metric-label {
+  @apply text-gray-400 text-sm mt-2;
+}

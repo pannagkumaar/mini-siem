@@ -1,0 +1,31 @@
+# General
+.DS_Store
+Thumbs.db
+*.log
+.vscode/
+.idea/
+
+# Python (Ingestion API, Engines, Scripts)
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+.env
+.pytest_cache/
+
+# Go (Syslog Server)
+*.exe
+*.test
+*.out
+ingestion/syslog-server-go/syslog-server
+
+# Node/React (Frontend)
+node_modules/
+dist/
+build/
+.env.local
+npm-debug.log*
+yarn-debug.log*
+
+# Docker
+docker-compose.override.yml

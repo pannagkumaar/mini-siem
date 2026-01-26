@@ -1,0 +1,9 @@
+id: DET-007
+name: Network Connection to Suspicious Port
+description: Detects network connections to known malicious ports or C2 infrastructure
+condition:
+  event_type: network_connection
+severity: medium
+mitre_tag:
+  - T1071
+  - T1572

@@ -1,0 +1,9 @@
+id: DET-011
+name: File Modification Detected
+description: Detects modification of critical system files
+condition:
+  event_type: file_modification
+severity: high
+mitre_tag:
+  - T1562
+  - T1036

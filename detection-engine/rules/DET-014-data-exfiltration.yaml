@@ -1,0 +1,9 @@
+id: DET-014
+name: Data Exfiltration Detected
+description: Detects suspicious data transfer or exfiltration attempts
+condition:
+  event_type: data_exfiltration
+severity: critical
+mitre_tag:
+  - T1020
+  - T1041

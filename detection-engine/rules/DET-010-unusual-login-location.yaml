@@ -1,0 +1,8 @@
+id: DET-010
+name: Successful Login from Unusual Location
+description: Detects successful logins from new or unusual geographic locations
+condition:
+  event_type: login_success
+  severity: low
+mitre_tag:
+  - T1133

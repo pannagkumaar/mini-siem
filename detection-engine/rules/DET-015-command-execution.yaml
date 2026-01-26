@@ -1,0 +1,8 @@
+id: DET-015
+name: Command Execution Detected
+description: Detects execution of suspicious shell commands
+condition:
+  event_type: command_execution
+severity: medium
+mitre_tag:
+  - T1059

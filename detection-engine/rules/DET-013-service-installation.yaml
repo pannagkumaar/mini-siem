@@ -1,0 +1,8 @@
+id: DET-013
+name: Service Installation Detected
+description: Detects installation of new Windows services or drivers
+condition:
+  event_type: service_installation
+severity: high
+mitre_tag:
+  - T1543

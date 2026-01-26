@@ -1,0 +1,9 @@
+id: DET-006
+name: Suspicious Process Execution
+description: Detects execution of suspicious processes and command-line tools
+condition:
+  event_type: suspicious_process
+severity: high
+mitre_tag:
+  - T1036
+  - T1003

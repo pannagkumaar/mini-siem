@@ -1,0 +1,82 @@
+services:
+  opensearch:
+    image: opensearchproject/opensearch:2.11.1 # Using a specific version is better practice
+    container_name: opensearch-node
+    environment:
+      - cluster.name=opensearch-cluster
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true # along with the ulimits setting below
+      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m" # demo purposes
+      - "plugins.security.disabled=true" # Disable security plugin
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536 # Increase max file descriptors
+        hard: 65536
+    volumes:
+      - opensearch-data:/usr/share/opensearch/data
+    ports:
+      - "9200:9200"
+      - "9600:9600" # for performance analyzer
+    networks:
+      - siem-net
+
+  opensearch-dashboards:
+    image: opensearchproject/opensearch-dashboards:2.11.1
+    container_name: opensearch-dashboards
+    ports:
+      - "5601:5601"
+    environment:
+      OPENSEARCH_HOSTS: '["http://opensearch-node:9200"]'
+    depends_on:
+      - opensearch
+    networks:
+      - siem-net
+
+  ingestion-api:
+    build:
+      context: .
+      dockerfile: ingestion/api-python/Dockerfile
+    container_name: ingestion-api
+    ports:
+      - "8000:8000"
+    networks:
+      - siem-net
+    depends_on:
+      - opensearch
+
+  syslog-server:
+    build:
+      context: .
+      dockerfile: ingestion/syslog-server-go/Dockerfile
+    container_name: syslog-server
+    ports:
+      - "514:514/udp"
+    networks:
+      - siem-net
+    depends_on:
+      - ingestion-api
+
+  react-ui:
+    build:
+      context: .
+      dockerfile: frontend/react-ui/Dockerfile
+    container_name: react-ui
+    ports:
+      - "3000:3000"
+    environment:
+      - VITE_API_URL=http://localhost:8000
+    networks:
+      - siem-net
+    depends_on:
+      - ingestion-api
+
+volumes:
+  opensearch-data:
+    driver: local
+
+networks:
+  siem-net:
+    driver: bridge

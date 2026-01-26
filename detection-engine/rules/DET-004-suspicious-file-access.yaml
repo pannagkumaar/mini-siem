@@ -1,0 +1,10 @@
+id: DET-004
+name: Suspicious File Access
+description: Detects access to sensitive files or unusual file patterns
+condition:
+  event_type: file_access
+  source: windows
+severity: medium
+mitre_tag:
+  - T1005
+  - T1083

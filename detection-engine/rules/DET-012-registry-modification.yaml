@@ -1,0 +1,8 @@
+id: DET-012
+name: Registry Modification Detected
+description: Detects modification of Windows registry
+condition:
+  event_type: registry_modification
+severity: high
+mitre_tag:
+  - T1112

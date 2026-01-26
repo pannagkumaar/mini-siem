@@ -1,0 +1,9 @@
+id: DET-005
+name: Privilege Escalation Attempt
+description: Detects attempts to escalate privileges on the system
+condition:
+  event_type: privilege_escalation
+severity: critical
+mitre_tag:
+  - T1134
+  - T1548

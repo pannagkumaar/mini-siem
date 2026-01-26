@@ -1,0 +1,8 @@
+id: DET-002
+name: Multiple Failed Login Attempts
+description: Detects repeated failed login attempts from the same source within a short timeframe
+condition:
+  event_type: login_failure
+severity: medium
+mitre_tag:
+  - T1110

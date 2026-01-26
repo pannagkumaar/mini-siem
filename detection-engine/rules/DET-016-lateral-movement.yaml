@@ -1,0 +1,9 @@
+id: DET-016
+name: Lateral Movement Detected
+description: Detects lateral movement attempts across hosts
+condition:
+  event_type: lateral_movement
+severity: high
+mitre_tag:
+  - T1570
+  - T1021
