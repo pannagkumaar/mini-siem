@@ -269,3 +269,50 @@ class DetectionEngine:
                 for r in self.rules
             ]
         }
+
+
+if __name__ == "__main__":
+    import os
+    import time
+    
+    # OpenSearch connection (use Docker service name)
+    opensearch_host = os.environ.get("OPENSEARCH_HOST", "opensearch-node")
+    opensearch_port = int(os.environ.get("OPENSEARCH_PORT", "9200"))
+    
+    logger.info(f"Connecting to OpenSearch at {opensearch_host}:{opensearch_port}")
+    
+    # Wait for OpenSearch to be ready
+    max_retries = 30
+    for attempt in range(max_retries):
+        try:
+            client = OpenSearch(
+                hosts=[{"host": opensearch_host, "port": opensearch_port}],
+                http_compress=True,
+                use_ssl=False,
+                verify_certs=False,
+                timeout=30,
+            )
+            # Test connection
+            info = client.info()
+            logger.info(f"✓ Connected to OpenSearch: {info['version']['number']}")
+            break
+        except Exception as e:
+            if attempt < max_retries - 1:
+                logger.warning(f"Waiting for OpenSearch... ({attempt + 1}/{max_retries})")
+                time.sleep(2)
+            else:
+                logger.error(f"Failed to connect to OpenSearch after {max_retries} attempts: {e}")
+                raise
+    
+    # Initialize Detection Engine
+    rules_dir = os.environ.get("RULES_DIR", "rules")
+    engine = DetectionEngine(client, rules_dir=rules_dir)
+    
+    # Run detection loop
+    interval = int(os.environ.get("DETECTION_INTERVAL", "10"))
+    lookback = int(os.environ.get("DETECTION_LOOKBACK", "5"))
+    
+    try:
+        engine.run_detection_loop(interval_seconds=interval, lookback_minutes=lookback)
+    except KeyboardInterrupt:
+        logger.info("Detection engine shutting down...")

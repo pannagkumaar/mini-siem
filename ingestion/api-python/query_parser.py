@@ -38,6 +38,11 @@ class QueryParser:
         'status': 'raw.status.keyword',
     }
     
+    # Fields that are keyword type and need case-insensitive matching
+    KEYWORD_FIELDS = {
+        'severity', 'event_type', 'source', 'host', 'user'
+    }
+    
     # Relative time expressions
     TIME_PATTERNS = {
         'now': 0,
@@ -66,8 +71,8 @@ class QueryParser:
     
     def _tokenize(self):
         """Tokenize the query string"""
-        # Pattern for tokens: words, quoted strings, operators
-        pattern = r'("[^"]*"|\'[^\']*\'|[^\s()]+)'
+        # Pattern for tokens: words, quoted strings, operators, parentheses
+        pattern = r'("[^"]*"|\'[^\']*\'|[()]|[^\s()]+)'
         matches = re.findall(pattern, self.query_string)
         self.tokens = [m.strip('\'"') for m in matches]
     
@@ -130,7 +135,15 @@ class QueryParser:
         if token and ':' in token:
             return self._parse_field_condition()
         
-        raise ValueError(f"Unexpected token: {token}")
+        # Handle bare terms (search across all fields)
+        return {
+            "multi_match": {
+                "query": token,
+                "fields": ["*"],
+                "type": "best_fields",
+                "lenient": True
+            }
+        }
     
     def _parse_field_condition(self) -> Dict[str, Any]:
         """Parse field:value conditions"""
@@ -184,12 +197,22 @@ class QueryParser:
                     }
                 }
             else:
-                # Term query
-                return {
-                    "term": {
-                        es_field: value
+                # For keyword fields, use match query for better compatibility
+                if field in self.KEYWORD_FIELDS:
+                    return {
+                        "match": {
+                            es_field: {
+                                "query": value.lower()
+                            }
+                        }
                     }
-                }
+                else:
+                    # Regular term query
+                    return {
+                        "term": {
+                            es_field: value
+                        }
+                    }
     
     def _handle_range_condition(self, field: str, value: str) -> Dict[str, Any]:
         """Handle range conditions like >100 or <2024-01-01"""

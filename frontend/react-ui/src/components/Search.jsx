@@ -57,10 +57,10 @@ export function SearchPage() {
       setLoading(true)
       setError(null)
       
-      const data = await searchLogs(query, hours, limit, offset)
-      setResults(data.results || [])
-      setTotalResults(data.total || 0)
-      setSearchTime(data.took_ms || 0)
+      const response = await searchLogs(query, hours, limit, offset)
+      setResults(response.data.results || [])
+      setTotalResults(response.data.total || 0)
+      setSearchTime(response.data.took_ms || 0)
     } catch (err) {
       setError(err.message || 'Search failed')
       setResults([])

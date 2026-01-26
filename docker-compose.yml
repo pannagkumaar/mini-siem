@@ -73,6 +73,30 @@ services:
     depends_on:
       - ingestion-api
 
+  detection-engine:
+    build:
+      context: .
+      dockerfile: detection-engine/Dockerfile
+    container_name: detection-engine
+    networks:
+      - siem-net
+    depends_on:
+      - opensearch
+      - ingestion-api
+    restart: unless-stopped
+
+  correlation-engine:
+    build:
+      context: .
+      dockerfile: correlation-engine/Dockerfile
+    container_name: correlation-engine
+    networks:
+      - siem-net
+    depends_on:
+      - opensearch
+      - detection-engine
+    restart: unless-stopped
+
 volumes:
   opensearch-data:
     driver: local

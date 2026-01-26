@@ -1,28 +1,28 @@
 import React, { useState } from 'react'
-import Dashboard from './components/Dashboard'
-import IncidentsPage from './components/Incidents'
-import AlertsPage from './components/Alerts'
-import LogsPage from './components/Logs'
-import RulesPage from './components/Rules'
-import { SearchPage } from './components/Search'
+import DashboardClean from './components/DashboardClean'
+import IncidentsPage from './components/IncidentsClean'
+import AlertsPage from './components/AlertsClean'
+import LogsPage from './components/LogsClean'
+import RulesClean from './components/RulesClean'
+import { SearchPage } from './components/SearchClean'
 import './index.css'
 
 export function App() {
   const [activePage, setActivePage] = useState('dashboard')
 
   const navigationItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: '📊', color: 'text-blue-400' },
-    { id: 'incidents', label: 'Incidents', icon: '🚨', color: 'text-red-400' },
-    { id: 'alerts', label: 'Alerts', icon: '🔔', color: 'text-yellow-400' },
-    { id: 'search', label: 'Search', icon: '🔍', color: 'text-green-400' },
-    { id: 'logs', label: 'Logs', icon: '📋', color: 'text-cyan-400' },
-    { id: 'rules', label: 'Rules', icon: '⚙️', color: 'text-purple-400' },
+    { id: 'dashboard', label: 'Dashboard' },
+    { id: 'incidents', label: 'Incidents' },
+    { id: 'alerts', label: 'Alerts' },
+    { id: 'search', label: 'Search' },
+    { id: 'logs', label: 'Logs' },
+    { id: 'rules', label: 'Rules' },
   ]
 
   const renderPage = () => {
     switch (activePage) {
       case 'dashboard':
-        return <Dashboard />
+        return <DashboardClean />
       case 'incidents':
         return <IncidentsPage />
       case 'alerts':
@@ -32,32 +32,31 @@ export function App() {
       case 'logs':
         return <LogsPage />
       case 'rules':
-        return <RulesPage />
+        return <RulesClean />
       default:
-        return <Dashboard />
+        return <DashboardClean />
     }
   }
 
   const currentNav = navigationItems.find(item => item.id === activePage)
 
   return (
-    <div className="min-h-screen bg-gray-900 text-gray-100 flex flex-col">
+    <div className="min-h-screen bg-[#0a0e27] text-gray-100 flex flex-col">
       {/* Header */}
-      <header className="bg-gradient-to-r from-gray-800 to-gray-900 border-b border-gray-700 sticky top-0 z-50 shadow-lg">
-        <div className="max-w-full px-6 py-5">
+      <header className="bg-[#0f1629] border-b border-[#1a2332] sticky top-0 z-50">
+        <div className="max-w-full px-6 py-4">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <span className="text-3xl">🛡️</span>
-              <div>
-                <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">
-                  Mini SIEM
-                </h1>
-                <p className="text-xs text-gray-400">Security Information & Event Management</p>
-              </div>
+            <div>
+              <h1 className="text-xl font-semibold text-gray-100">
+                Security Operations Center
+              </h1>
+              <p className="text-xs text-gray-500 mt-0.5">Real-time threat intelligence platform</p>
             </div>
-            <div className="text-right text-sm text-gray-400">
-              <p className="text-xs">Current Page: <span className={`font-semibold ${currentNav?.color}`}>{currentNav?.label}</span></p>
-              <p className="text-xs mt-1">{new Date().toLocaleTimeString()}</p>
+            <div className="flex items-center space-x-6 text-xs text-gray-500">
+              <div>
+                <span className="text-gray-400">Active:</span> {currentNav?.label}
+              </div>
+              <div>{new Date().toLocaleTimeString()}</div>
             </div>
           </div>
         </div>
@@ -65,39 +64,32 @@ export function App() {
 
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}
-        <aside className="w-64 bg-gray-800 border-r border-gray-700 overflow-y-auto sticky top-16 h-[calc(100vh-4rem)]">
-          <nav className="p-4 space-y-2">
+        <aside className="w-56 bg-[#0f1629] border-r border-[#1a2332] overflow-y-auto sticky top-16 h-[calc(100vh-4rem)]">
+          <nav className="p-3 space-y-1">
             {navigationItems.map((item) => (
               <button
                 key={item.id}
                 onClick={() => setActivePage(item.id)}
-                className={`w-full text-left px-4 py-4 rounded-lg transition flex items-center gap-3 font-medium ${
+                className={`w-full text-left px-4 py-3 rounded transition flex items-center text-sm ${
                   activePage === item.id
-                    ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg'
-                    : 'text-gray-300 hover:bg-gray-700'
+                    ? 'bg-[#1a2744] text-gray-100 border-l-2 border-blue-500'
+                    : 'text-gray-400 hover:bg-[#151b2e] hover:text-gray-300'
                 }`}
               >
-                <span className="text-xl">{item.icon}</span>
                 <span>{item.label}</span>
-                {activePage === item.id && (
-                  <span className="ml-auto">→</span>
-                )}
               </button>
             ))}
           </nav>
 
-          {/* Sidebar Footer - Quick Stats */}
-          <div className="p-4 border-t border-gray-700 mt-auto space-y-2 text-xs text-gray-400">
-            <div className="text-center py-2">
-              <p className="text-gray-500 font-semibold mb-2">Quick Links</p>
-              <div className="space-y-1">
-                <a href="http://localhost:5601" target="_blank" rel="noopener noreferrer" className="block hover:text-blue-400 transition">
-                  📊 OpenSearch Dashboards
-                </a>
-                <a href="http://localhost:8000/docs" target="_blank" rel="noopener noreferrer" className="block hover:text-blue-400 transition">
-                  📖 API Docs
-                </a>
-              </div>
+          {/* Sidebar Footer */}
+          <div className="p-4 border-t border-[#1a2332] mt-auto text-xs">
+            <div className="space-y-2">
+              <a href="http://localhost:5601" target="_blank" rel="noopener noreferrer" className="block text-gray-500 hover:text-gray-400 transition">
+                OpenSearch
+              </a>
+              <a href="http://localhost:8000/docs" target="_blank" rel="noopener noreferrer" className="block text-gray-500 hover:text-gray-400 transition">
+                API Documentation
+              </a>
             </div>
           </div>
         </aside>
@@ -111,16 +103,6 @@ export function App() {
           </div>
         </main>
       </div>
-
-      {/* Footer */}
-      <footer className="bg-gray-800 border-t border-gray-700 mt-auto">
-        <div className="max-w-full px-6 py-4">
-          <div className="flex items-center justify-between text-sm text-gray-500">
-            <p>Mini SIEM • Built with FastAPI, OpenSearch, React & Vite</p>
-            <p>Version 1.0.0 • All systems operational ✓</p>
-          </div>
-        </div>
-      </footer>
     </div>
   )
 }

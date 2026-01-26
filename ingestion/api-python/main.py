@@ -848,6 +848,77 @@ def get_saved_searches():
         return {"searches": [], "count": 0}
 
 
+@app.post("/rules/create")
+async def create_custom_rule(request: Request):
+    """
+    Create a new custom detection rule dynamically.
+    Accepts rule definition and writes it to the rules directory.
+    """
+    try:
+        rule_data = await request.json()
+        
+        # Validate required fields
+        if not rule_data.get("name"):
+            raise HTTPException(status_code=400, detail="Rule name is required")
+        if not rule_data.get("description"):
+            raise HTTPException(status_code=400, detail="Rule description is required")
+        if not rule_data.get("severity"):
+            raise HTTPException(status_code=400, detail="Rule severity is required")
+        if not rule_data.get("condition"):
+            raise HTTPException(status_code=400, detail="Rule condition is required")
+        
+        # Generate rule ID if not provided
+        if not rule_data.get("id"):
+            # Find the next available rule number
+            import glob
+            existing_rules = glob.glob("detection-engine/rules/DET-*.yaml")
+            if existing_rules:
+                max_num = max([int(f.split("DET-")[1].split("-")[0]) for f in existing_rules if "DET-" in f])
+                rule_num = max_num + 1
+            else:
+                rule_num = 100
+            rule_data["id"] = f"DET-{rule_num:03d}"
+        
+        # Sanitize filename
+        filename_safe = rule_data["name"].lower().replace(" ", "-").replace("_", "-")
+        filename_safe = "".join(c for c in filename_safe if c.isalnum() or c == "-")
+        rule_file = f"detection-engine/rules/{rule_data['id']}-{filename_safe}.yaml"
+        
+        # Convert to YAML format
+        import yaml
+        yaml_content = yaml.dump(rule_data, default_flow_style=False, sort_keys=False)
+        
+        # Write to file
+        os.makedirs("detection-engine/rules", exist_ok=True)
+        with open(rule_file, "w") as f:
+            f.write(yaml_content)
+        
+        logger.info(f"Created new custom rule: {rule_data['id']} - {rule_data['name']} -> {rule_file}")
+        
+        # Reload detection engine rules (if engine is running)
+        try:
+            from detection_engine import engine
+            engine.load_rules()  # Reload rules dynamically
+            logger.info("Detection engine rules reloaded")
+        except Exception as reload_err:
+            logger.warning(f"Could not reload detection engine: {reload_err}")
+        
+        return {
+            "success": True,
+            "rule_id": rule_data["id"],
+            "message": f"Rule created successfully: {rule_file}",
+            "file": rule_file
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating custom rule: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Failed to create rule: {str(e)}")
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")

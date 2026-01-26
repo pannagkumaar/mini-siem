@@ -307,3 +307,51 @@ class CorrelationEngine:
                 for p in self.patterns
             ]
         }
+
+
+if __name__ == "__main__":
+    import os
+    import time
+    
+    # OpenSearch connection (use Docker service name)
+    opensearch_host = os.environ.get("OPENSEARCH_HOST", "opensearch-node")
+    opensearch_port = int(os.environ.get("OPENSEARCH_PORT", "9200"))
+    
+    logger.info(f"Connecting to OpenSearch at {opensearch_host}:{opensearch_port}")
+    
+    # Wait for OpenSearch to be ready
+    max_retries = 30
+    for attempt in range(max_retries):
+        try:
+            client = OpenSearch(
+                hosts=[{"host": opensearch_host, "port": opensearch_port}],
+                http_compress=True,
+                use_ssl=False,
+                verify_certs=False,
+                timeout=30,
+            )
+            # Test connection
+            info = client.info()
+            logger.info(f"✓ Connected to OpenSearch: {info['version']['number']}")
+            break
+        except Exception as e:
+            if attempt < max_retries - 1:
+                logger.warning(f"Waiting for OpenSearch... ({attempt + 1}/{max_retries})")
+                time.sleep(2)
+            else:
+                logger.error(f"Failed to connect to OpenSearch after {max_retries} attempts: {e}")
+                raise
+    
+    # Initialize Correlation Engine
+    engine = CorrelationEngine(client)
+    
+    # Run correlation loop
+    interval = int(os.environ.get("CORRELATION_INTERVAL", "15"))
+    lookback = int(os.environ.get("CORRELATION_LOOKBACK", "15"))
+    
+    logger.info(f"🔗 Correlation Engine Started (checking every {interval}s, lookback {lookback}m)")
+    
+    try:
+        engine.run_correlation_loop(interval_seconds=interval, lookback_minutes=lookback)
+    except KeyboardInterrupt:
+        logger.info("Correlation engine shutting down...")

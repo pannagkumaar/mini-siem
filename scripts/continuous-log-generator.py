@@ -318,7 +318,7 @@ def main():
     failed = 0
     
     try:
-        while True:
+        for i in range(69):
             # Generate batch of logs
             logs = [generate_log() for _ in range(BATCH_SIZE)]
             
