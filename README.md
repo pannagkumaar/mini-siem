@@ -2,9 +2,9 @@
 
 An **enterprise-grade SIEM platform** built with Go, Python, OpenSearch, and React for real-time security event processing, threat detection, and advanced threat hunting.
 
-**Now with AI Security Agent** - Get instant incident response recommendations using Groq's Llama 3.3 70B model! 🤖
+**Now with AI Security Agent** - Get instant incident response recommendations using Groq's Llama 3.3 70B model! 
 
-**Advanced Search** - Query your logs like you would in Splunk or ElasticSearch! 🔍
+**Advanced Search** - Query your logs like you would in Splunk or ElasticSearch! 
 
 ## Quick Start
 
@@ -33,12 +33,12 @@ python scripts/init-db.py
 
 ### Access the Dashboard
 - **Web UI**: http://localhost:3000
-- **🤖 AI-Powered Alerts**: Click any alert to get AI recommendations
+- ** AI-Powered Alerts**: Click any alert to get AI recommendations
 - **Advanced Search** (NEW): Click 🔍 in navigation
 - **OpenSearch Dashboards**: http://localhost:5601
 - **API Health**: http://localhost:8000/health
 
-## 🚀 What's New: AI Security Agent
+##  What's New: AI Security Agent
 
 **Powered by Groq's Llama 3.3 70B:**
 - **Threat Assessment**: Automatic severity analysis and impact assessment
@@ -54,7 +54,7 @@ python scripts/init-db.py
 - Actionable security recommendations
 - Background processing for new alerts
 
-## 🔍 Advanced Search
+##  Advanced Search
 ## What's New: Advanced Search
 
 **Professional search interface with:**
@@ -86,7 +86,7 @@ commandline:*powershell* AND severity:critical
                                                  [React UI - 6 Pages]
 ```
 
-## Features Implemented ✅
+## Features Implemented 
 
 - **Phase 1**: OpenSearch storage with normalized schema
 - **Phase 2**: RFC5424 syslog server + JSON API with forwarding
