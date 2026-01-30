@@ -12,7 +12,7 @@ export function IncidentsPage() {
   const [showStatusModal, setShowStatusModal] = useState(null)
   const [statusNotes, setStatusNotes] = useState('')
   const [successMessage, setSuccessMessage] = useState(null)
-  const [resolveMode, setResolveMode] = useState(null)  // 'status' or 'resolve'
+  const [resolveMode, setResolveMode] = useState(null)
 
   useEffect(() => {
     const fetchIncidents = async () => {
@@ -30,7 +30,7 @@ export function IncidentsPage() {
     }
 
     fetchIncidents()
-    const interval = setInterval(fetchIncidents, 10000) // Refresh every 10s
+    const interval = setInterval(fetchIncidents, 10000)
 
     return () => clearInterval(interval)
   }, [hours])
@@ -38,28 +38,28 @@ export function IncidentsPage() {
   const getSeverityColor = (severity) => {
     switch (severity?.toLowerCase()) {
       case 'critical':
-        return 'bg-red-600 text-white'
+        return 'bg-red-900/50 text-red-200 border-red-800'
       case 'high':
-        return 'bg-orange-600 text-white'
+        return 'bg-orange-900/50 text-orange-200 border-orange-800'
       case 'medium':
-        return 'bg-yellow-600 text-white'
+        return 'bg-yellow-900/50 text-yellow-200 border-yellow-800'
       case 'low':
-        return 'bg-blue-600 text-white'
+        return 'bg-blue-900/50 text-blue-200 border-blue-800'
       default:
-        return 'bg-gray-600 text-white'
+        return 'bg-gray-800 text-gray-300 border-gray-700'
     }
   }
 
   const getStatusColor = (status) => {
     switch (status?.toLowerCase()) {
       case 'open':
-        return 'bg-red-900 text-red-200'
+        return 'bg-red-900/50 text-red-200 border-red-800'
       case 'investigating':
-        return 'bg-yellow-900 text-yellow-200'
+        return 'bg-yellow-900/50 text-yellow-200 border-yellow-800'
       case 'resolved':
-        return 'bg-green-900 text-green-200'
+        return 'bg-green-900/50 text-green-200 border-green-800'
       default:
-        return 'bg-gray-700 text-gray-200'
+        return 'bg-gray-800 text-gray-300 border-gray-700'
     }
   }
 
@@ -76,20 +76,17 @@ export function IncidentsPage() {
   const handleInvestigate = async (incidentId, idx) => {
     try {
       setActionLoading(`investigate-${idx}`)
-      const response = await startInvestigation(incidentId)
-      setSuccessMessage('Investigation started ✓')
+      await startInvestigation(incidentId)
+      setSuccessMessage('Investigation started')
       
-      // Update local state
       setIncidents(incidents.map((inc, i) => 
         i === idx ? { ...inc, status: 'investigating' } : inc
       ))
       
-      // Keep success message visible longer
-      setTimeout(() => setSuccessMessage(null), 5000)
+      setTimeout(() => setSuccessMessage(null), 3000)
     } catch (err) {
       setError(err.message || 'Failed to start investigation')
-      console.error('Error:', err)
-      setTimeout(() => setError(null), 5000)
+      setTimeout(() => setError(null), 3000)
     } finally {
       setActionLoading(null)
     }
@@ -98,25 +95,19 @@ export function IncidentsPage() {
   const handleStatusUpdate = async (incidentId, idx, newStatus) => {
     try {
       setActionLoading(`status-${idx}`)
-      const response = await updateIncidentStatus(incidentId, newStatus)
-      setSuccessMessage(`Status updated to ${newStatus} ✓`)
+      await updateIncidentStatus(incidentId, newStatus, statusNotes)
+      setSuccessMessage(`Status updated to ${newStatus}`)
       
-      // Update local state
       setIncidents(incidents.map((inc, i) => 
         i === idx ? { ...inc, status: newStatus } : inc
       ))
       
-      // Close modal first
       setShowStatusModal(null)
       setStatusNotes('')
-      setResolveMode(null)
-      
-      // Keep success message visible longer
-      setTimeout(() => setSuccessMessage(null), 5000)
+      setTimeout(() => setSuccessMessage(null), 3000)
     } catch (err) {
       setError(err.message || 'Failed to update status')
-      console.error('Error:', err)
-      setTimeout(() => setError(null), 5000)
+      setTimeout(() => setError(null), 3000)
     } finally {
       setActionLoading(null)
     }
@@ -125,25 +116,19 @@ export function IncidentsPage() {
   const handleResolve = async (incidentId, idx) => {
     try {
       setActionLoading(`resolve-${idx}`)
-      const response = await resolveIncident(incidentId, statusNotes || null)
-      setSuccessMessage('Incident resolved ✓')
+      await resolveIncident(incidentId, statusNotes)
+      setSuccessMessage('Incident resolved')
       
-      // Update local state
       setIncidents(incidents.map((inc, i) => 
         i === idx ? { ...inc, status: 'resolved' } : inc
       ))
       
-      // Close modal first
       setShowStatusModal(null)
       setStatusNotes('')
-      setResolveMode(null)
-      
-      // Keep success message visible longer
-      setTimeout(() => setSuccessMessage(null), 5000)
+      setTimeout(() => setSuccessMessage(null), 3000)
     } catch (err) {
       setError(err.message || 'Failed to resolve incident')
-      console.error('Error:', err)
-      setTimeout(() => setError(null), 5000)
+      setTimeout(() => setError(null), 3000)
     } finally {
       setActionLoading(null)
     }
@@ -153,331 +138,229 @@ export function IncidentsPage() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold">🚨 Security Incidents</h1>
         <div>
-          <select
-            value={hours}
-            onChange={(e) => setHours(parseInt(e.target.value))}
-            className="bg-gray-700 text-white px-4 py-2 rounded border border-gray-600 hover:border-gray-500"
-          >
-            <option value="1">Last 1 hour</option>
-            <option value="6">Last 6 hours</option>
-            <option value="24">Last 24 hours</option>
-            <option value="168">Last 7 days</option>
-          </select>
+          <h2 className="text-2xl font-semibold text-gray-100">Security Incidents</h2>
+          <p className="text-sm text-gray-500 mt-1">Correlated security events</p>
         </div>
+        <select
+          value={hours}
+          onChange={(e) => setHours(parseInt(e.target.value))}
+          className="bg-[#0f1629] border border-[#1a2332] text-gray-300 px-3 py-2 rounded text-sm focus:border-blue-500 focus:outline-none"
+        >
+          <option value="1">Last 1 hour</option>
+          <option value="6">Last 6 hours</option>
+          <option value="24">Last 24 hours</option>
+          <option value="168">Last 7 days</option>
+        </select>
       </div>
 
       {error && (
-        <div className="fixed top-4 right-4 bg-red-600 border-2 border-red-400 rounded-lg p-4 text-white shadow-lg z-40">
-          <p className="font-bold text-lg">⚠️ {error}</p>
+        <div className="bg-red-900/20 border border-red-800 rounded px-4 py-3 text-red-200 text-sm">
+          <span className="font-medium">Error:</span> {error}
         </div>
       )}
 
       {successMessage && (
-        <div className="fixed top-4 right-4 bg-green-600 border-2 border-green-400 rounded-lg p-4 text-white shadow-lg z-40 animate-bounce">
-          <p className="font-bold text-lg">{successMessage}</p>
+        <div className="bg-green-900/20 border border-green-800 rounded px-4 py-3 text-green-200 text-sm">
+          <span className="font-medium">Success:</span> {successMessage}
         </div>
       )}
 
       {/* Status Filter Bar */}
-      <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
+      <div className="bg-[#0f1629] border border-[#1a2332] rounded p-4">
         <div className="flex gap-2 flex-wrap">
           <button
             onClick={() => setFilterStatus(null)}
-            className={`px-4 py-2 rounded font-semibold transition ${
-              filterStatus === null 
-                ? 'bg-blue-600 text-white' 
-                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+            className={`px-3 py-1.5 rounded text-xs font-medium transition border ${
+              filterStatus === null
+                ? 'bg-blue-600 text-white border-blue-600'
+                : 'bg-[#0a0e27] text-gray-400 border-[#1a2332] hover:border-[#2a3f5f]'
             }`}
           >
             All ({incidents.length})
           </button>
-          {Object.entries(statusCounts).map(([status, count]) => (
-            <button
-              key={status}
-              onClick={() => setFilterStatus(status)}
-              className={`px-4 py-2 rounded font-semibold capitalize transition ${
-                filterStatus === status
-                  ? `${getStatusColor(status)} ring-2 ring-white`
-                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-              }`}
-            >
-              {status} ({count})
-            </button>
+          {['open', 'investigating', 'resolved'].map((status) => (
+            statusCounts[status] > 0 && (
+              <button
+                key={status}
+                onClick={() => setFilterStatus(status)}
+                className={`px-3 py-1.5 rounded text-xs font-medium transition border capitalize ${
+                  filterStatus === status
+                    ? getStatusColor(status)
+                    : 'bg-[#0a0e27] text-gray-400 border-[#1a2332] hover:border-[#2a3f5f]'
+                }`}
+              >
+                {status} ({statusCounts[status]})
+              </button>
+            )
           ))}
         </div>
       </div>
 
       {/* Incidents List */}
-      {loading && incidents.length === 0 ? (
-        <div className="bg-gray-800 border border-gray-700 rounded-lg p-12 text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-400 mx-auto mb-4"></div>
-          <p className="text-gray-400">Loading incidents...</p>
+      {loading ? (
+        <div className="bg-[#0f1629] border border-[#1a2332] rounded p-12 text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-2 border-blue-500 border-t-transparent mx-auto mb-4"></div>
+          <p className="text-gray-400 text-sm">Loading incidents</p>
         </div>
       ) : filteredIncidents.length === 0 ? (
-        <div className="bg-gray-800 border border-gray-700 rounded-lg p-12 text-center">
-          <p className="text-gray-400 text-lg">✓ No incidents detected</p>
+        <div className="bg-[#0f1629] border border-[#1a2332] rounded p-12 text-center">
+          <p className="text-gray-400">No incidents found</p>
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-3">
           {filteredIncidents.map((incident, idx) => (
-            <div
+            <div 
               key={idx}
-              className="bg-gray-800 border border-gray-700 rounded-lg border-l-4 border-l-red-500 hover:border-gray-600 transition cursor-pointer"
-              onClick={() => setExpandedId(expandedId === idx ? null : idx)}
+              className="bg-[#0f1629] border border-[#1a2332] rounded overflow-hidden"
             >
-              {/* Incident Header */}
               <div className="p-4">
-                <div className="flex justify-between items-start gap-4 mb-3">
+                <div className="flex items-start justify-between mb-3">
                   <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-2">
-                      <span className={`px-3 py-1 rounded text-sm font-bold ${getSeverityColor(incident.severity)}`}>
-                        {incident.severity?.toUpperCase()}
+                    <div className="flex items-center space-x-3 mb-2">
+                      <span className={`px-2 py-0.5 rounded text-xs font-medium border ${getSeverityColor(incident.severity)}`}>
+                        {incident.severity}
                       </span>
-                      <h3 className="text-lg font-bold text-white">{incident.title || 'Untitled Incident'}</h3>
+                      <span className={`px-2 py-0.5 rounded text-xs font-medium border ${getStatusColor(incident.status)}`}>
+                        {incident.status}
+                      </span>
+                      <span className="text-gray-600 text-xs">{new Date(incident.timestamp).toLocaleString()}</span>
                     </div>
-                    <p className="text-sm text-gray-400 mb-2">ID: <span className="font-mono">{incident.pattern_id}</span></p>
-                    <p className="text-sm text-gray-300 mb-3">{incident.description}</p>
+                    <h3 className="text-base font-medium text-gray-100 mb-1">{incident.pattern_name || 'Incident'}</h3>
+                    <p className="text-sm text-gray-400">{incident.description}</p>
                   </div>
-                  <div className="text-right">
-                    <span className={`px-3 py-1 rounded text-xs font-bold ${getStatusColor(incident.status)}`}>
-                      {incident.status?.toUpperCase()}
-                    </span>
-                    <p className="text-xs text-gray-500 mt-2">{new Date(incident.timestamp).toLocaleString()}</p>
-                  </div>
+                  <button
+                    onClick={() => setExpandedId(expandedId === idx ? null : idx)}
+                    className="ml-4"
+                  >
+                    <svg 
+                      className={`w-5 h-5 text-gray-500 transition-transform ${expandedId === idx ? 'rotate-180' : ''}`}
+                      fill="none" 
+                      stroke="currentColor" 
+                      viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
                 </div>
 
-                {/* Quick Details Grid */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm bg-gray-900 rounded p-3">
-                  {incident.host && (
-                    <div className="text-gray-400">
-                      <span className="text-gray-500 text-xs">Host</span>
-                      <p className="text-blue-300 font-mono">{incident.host}</p>
-                    </div>
+                {/* Action Buttons */}
+                <div className="flex gap-2">
+                  {incident.status === 'open' && (
+                    <button
+                      onClick={() => handleInvestigate(incident.incident_id, idx)}
+                      disabled={actionLoading === `investigate-${idx}`}
+                      className="px-3 py-1.5 bg-yellow-600 hover:bg-yellow-700 rounded text-xs text-white disabled:opacity-50"
+                    >
+                      {actionLoading === `investigate-${idx}` ? 'Processing...' : 'Start Investigation'}
+                    </button>
                   )}
-                  {incident.user && (
-                    <div className="text-gray-400">
-                      <span className="text-gray-500 text-xs">User</span>
-                      <p className="text-green-300">{incident.user}</p>
-                    </div>
+                  {incident.status !== 'resolved' && (
+                    <>
+                      <button
+                        onClick={() => { setShowStatusModal(idx); setResolveMode('status'); }}
+                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 rounded text-xs text-white"
+                      >
+                        Update Status
+                      </button>
+                      <button
+                        onClick={() => { setShowStatusModal(idx); setResolveMode('resolve'); }}
+                        className="px-3 py-1.5 bg-green-600 hover:bg-green-700 rounded text-xs text-white"
+                      >
+                        Resolve
+                      </button>
+                    </>
                   )}
-                  {incident.alert_count !== undefined && (
-                    <div className="text-gray-400">
-                      <span className="text-gray-500 text-xs">Related Alerts</span>
-                      <p className="text-yellow-300 font-bold text-lg">{incident.alert_count}</p>
-                    </div>
-                  )}
-                  {incident.impact && (
-                    <div className="text-gray-400">
-                      <span className="text-gray-500 text-xs">Impact</span>
-                      <p className="text-orange-300 capitalize">{incident.impact}</p>
-                    </div>
-                  )}
-                </div>
-
-                {/* Expand indicator */}
-                <div className="text-right text-gray-500 mt-2">
-                  <span className="text-lg">{expandedId === idx ? '▼' : '▶'}</span>
                 </div>
               </div>
 
-              {/* Expanded Details */}
               {expandedId === idx && (
-                <div className="border-t border-gray-700 bg-gray-900 p-4 space-y-4">
-                  {/* Incident Metadata */}
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <div className="px-4 pb-4 border-t border-[#1a2332] pt-4 bg-[#0a0e27]">
+                  <div className="space-y-4">
                     <div>
-                      <h4 className="text-xs font-bold text-gray-400 uppercase mb-1">Incident ID</h4>
-                      <p className="text-sm text-gray-300 font-mono">{incident.pattern_id}</p>
-                    </div>
-                    <div>
-                      <h4 className="text-xs font-bold text-gray-400 uppercase mb-1">Detected</h4>
-                      <p className="text-sm text-gray-300">{new Date(incident.timestamp).toISOString()}</p>
-                    </div>
-                    <div>
-                      <h4 className="text-xs font-bold text-gray-400 uppercase mb-1">Status</h4>
-                      <p className={`text-sm capitalize ${incident.status === 'open' ? 'text-red-300' : incident.status === 'investigating' ? 'text-yellow-300' : 'text-green-300'}`}>
-                        {incident.status}
-                      </p>
-                    </div>
-                    {incident.start_time && (
-                      <div>
-                        <h4 className="text-xs font-bold text-gray-400 uppercase mb-1">Started</h4>
-                        <p className="text-sm text-gray-300">{new Date(incident.start_time).toLocaleTimeString()}</p>
-                      </div>
-                    )}
-                    {incident.end_time && (
-                      <div>
-                        <h4 className="text-xs font-bold text-gray-400 uppercase mb-1">Ended</h4>
-                        <p className="text-sm text-gray-300">{new Date(incident.end_time).toLocaleTimeString()}</p>
-                      </div>
-                    )}
-                    {incident.affected_entities && (
-                      <div>
-                        <h4 className="text-xs font-bold text-gray-400 uppercase mb-1">Affected Entities</h4>
-                        <p className="text-sm text-gray-300">{incident.affected_entities}</p>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Alert Timeline */}
-                  {incident.alert_timeline && (
-                    <div>
-                      <h4 className="text-sm font-bold text-gray-300 mb-2 uppercase">📊 Alert Timeline</h4>
-                      <div className="bg-gray-800 rounded p-3 space-y-2 max-h-64 overflow-y-auto">
-                        {Array.isArray(incident.alert_timeline) ? (
-                          incident.alert_timeline.map((alert, i) => (
-                            <div key={i} className="text-xs text-gray-400 border-l-2 border-gray-700 pl-3 py-1">
-                              <span className="text-blue-400">{new Date(alert.timestamp).toLocaleTimeString()}</span>
-                              {' - '}
-                              <span className="text-yellow-400">{alert.rule_name}</span>
-                              <span className="text-gray-500"> ({alert.host})</span>
-                            </div>
-                          ))
-                        ) : (
-                          <p className="text-gray-500">No timeline available</p>
-                        )}
+                      <h4 className="text-xs font-medium text-gray-500 mb-2 uppercase tracking-wide">Incident Details</h4>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                        <div>
+                          <span className="text-gray-500">Incident ID:</span>
+                          <span className="text-gray-300 ml-2 font-mono text-xs">{incident.incident_id || 'N/A'}</span>
+                        </div>
+                        <div>
+                          <span className="text-gray-500">Pattern:</span>
+                          <span className="text-gray-300 ml-2 font-mono text-xs">{incident.pattern_id || 'N/A'}</span>
+                        </div>
                       </div>
                     </div>
-                  )}
 
-                  {/* Recommendation */}
-                  {incident.recommendation && (
                     <div>
-                      <h4 className="text-sm font-bold text-gray-300 mb-2 uppercase">💡 Recommendation</h4>
-                      <div className="bg-blue-900 border border-blue-700 rounded p-3">
-                        <p className="text-sm text-blue-200">{incident.recommendation}</p>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Full JSON View */}
-                  <div>
-                    <h4 className="text-sm font-bold text-gray-300 mb-2 uppercase">Full Details</h4>
-                    <div className="bg-gray-800 rounded p-3 font-mono text-xs text-gray-300 overflow-x-auto max-h-96 overflow-y-auto">
-                      <pre>{JSON.stringify(incident, null, 2)}</pre>
-                    </div>
-                  </div>
-
-                  {/* Action Buttons */}
-                  <div className="flex gap-2 pt-2 border-t border-gray-700">
-                    <button 
-                      onClick={() => handleInvestigate(incident._id || incident.pattern_id, idx)}
-                      disabled={actionLoading === `investigate-${idx}` || incident.status === 'investigating'}
-                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded text-sm font-semibold transition"
-                    >
-                      {actionLoading === `investigate-${idx}` ? '⏳ Loading...' : '👁️ Investigate'}
-                    </button>
-                    <button 
-                      onClick={() => {
-                        setShowStatusModal(idx)
-                        setResolveMode('status')
-                        setStatusNotes('')
-                      }}
-                      className="px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded text-sm font-semibold transition"
-                    >
-                      🔄 Status Update
-                    </button>
-                    <button 
-                      onClick={() => {
-                        setShowStatusModal(idx)
-                        setResolveMode('resolve')
-                        setStatusNotes('')
-                      }}
-                      disabled={actionLoading === `resolve-${idx}` || incident.status === 'resolved'}
-                      className="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded text-sm font-semibold transition"
-                    >
-                      {actionLoading === `resolve-${idx}` ? '⏳ Loading...' : '✓ Resolve'}
-                    </button>
-                  </div>
-
-                  {/* Status Update Modal */}
-                  {showStatusModal === idx && (
-                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                      <div className="bg-gray-800 border border-gray-700 rounded-lg p-6 max-w-md w-full mx-4">
-                        <h3 className="text-lg font-bold text-white mb-4">
-                          {resolveMode === 'resolve' ? 'Resolve Incident' : 'Update Incident Status'}
-                        </h3>
-                        
-                        {/* Status Update Mode */}
-                        {resolveMode === 'status' && (
-                          <div className="space-y-3 mb-6">
-                            <label className="flex items-center gap-3 cursor-pointer p-3 rounded hover:bg-gray-700">
-                              <input 
-                                type="radio" 
-                                name="status" 
-                                value="open" 
-                                onChange={() => handleStatusUpdate(incident._id || incident.pattern_id, idx, 'open')}
-                                className="w-4 h-4"
-                              />
-                              <span className="text-white">🔴 Open</span>
-                            </label>
-                            <label className="flex items-center gap-3 cursor-pointer p-3 rounded hover:bg-gray-700">
-                              <input 
-                                type="radio" 
-                                name="status" 
-                                value="investigating" 
-                                onChange={() => handleStatusUpdate(incident._id || incident.pattern_id, idx, 'investigating')}
-                                className="w-4 h-4"
-                              />
-                              <span className="text-white">🟡 Investigating</span>
-                            </label>
+                      <h4 className="text-xs font-medium text-gray-500 mb-2 uppercase tracking-wide">Affected Systems</h4>
+                      <div className="space-y-1 text-sm">
+                        {incident.hosts && incident.hosts.length > 0 && (
+                          <div>
+                            <span className="text-gray-500">Hosts: </span>
+                            <span className="text-gray-300">{incident.hosts.join(', ')}</span>
                           </div>
                         )}
-
-                        {/* Resolve Mode */}
-                        {resolveMode === 'resolve' && (
-                          <>
-                            <p className="text-gray-300 mb-4">Are you sure you want to resolve this incident?</p>
-                            <div className="mb-4">
-                              <label className="block text-sm text-gray-300 mb-2">Resolution Notes (optional)</label>
-                              <textarea
-                                value={statusNotes}
-                                onChange={(e) => setStatusNotes(e.target.value)}
-                                placeholder="Add resolution notes..."
-                                className="w-full bg-gray-700 text-white rounded p-2 border border-gray-600 text-sm focus:outline-none focus:border-blue-500"
-                                rows="3"
-                              />
-                            </div>
-                            <div className="flex gap-2">
-                              <button
-                                onClick={() => handleResolve(incident._id || incident.pattern_id, idx)}
-                                disabled={actionLoading === `resolve-${idx}`}
-                                className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 text-white rounded font-semibold transition"
-                              >
-                                {actionLoading === `resolve-${idx}` ? '⏳ Resolving...' : '✓ Confirm Resolve'}
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setShowStatusModal(null)
-                                  setStatusNotes('')
-                                  setResolveMode(null)
-                                }}
-                                className="flex-1 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded font-semibold transition"
-                              >
-                                Cancel
-                              </button>
-                            </div>
-                          </>
+                        {incident.users && incident.users.length > 0 && (
+                          <div>
+                            <span className="text-gray-500">Users: </span>
+                            <span className="text-gray-300">{incident.users.join(', ')}</span>
+                          </div>
                         )}
-
-                        {/* Status Update Buttons */}
-                        {resolveMode === 'status' && (
-                          <button 
-                            onClick={() => {
-                              setShowStatusModal(null)
-                              setStatusNotes('')
-                              setResolveMode(null)
-                            }}
-                            className="w-full px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded font-semibold transition"
-                          >
-                            Close
-                          </button>
+                        {(!incident.hosts || incident.hosts.length === 0) && (!incident.users || incident.users.length === 0) && (
+                          <div className="text-gray-500 text-xs">No system information available</div>
                         )}
                       </div>
                     </div>
-                  )}
+
+                    {incident.events && incident.events.length > 0 && (
+                      <div>
+                        <h4 className="text-xs font-medium text-gray-500 mb-2 uppercase tracking-wide">Related Events ({incident.events.length})</h4>
+                        <div className="space-y-2">
+                          {incident.events.slice(0, 5).map((event, eventIdx) => (
+                            <div key={eventIdx} className="bg-[#0f1629] border border-[#1a2332] rounded p-3">
+                              <div className="flex justify-between items-start mb-2">
+                                <span className="text-gray-300 text-sm font-medium">{event.event_type || 'Event'}</span>
+                                <span className="text-gray-600 text-xs">{new Date(event.timestamp).toLocaleString()}</span>
+                              </div>
+                              <div className="grid grid-cols-2 gap-2 text-xs">
+                                <div>
+                                  <span className="text-gray-500">Host:</span>
+                                  <span className="text-gray-300 ml-1">{event.host || 'N/A'}</span>
+                                </div>
+                                <div>
+                                  <span className="text-gray-500">User:</span>
+                                  <span className="text-gray-300 ml-1">{event.user || 'N/A'}</span>
+                                </div>
+                                {event.source && (
+                                  <div>
+                                    <span className="text-gray-500">Source:</span>
+                                    <span className="text-gray-300 ml-1">{event.source}</span>
+                                  </div>
+                                )}
+                                {event.severity && (
+                                  <div>
+                                    <span className="text-gray-500">Severity:</span>
+                                    <span className="text-gray-300 ml-1 capitalize">{event.severity}</span>
+                                  </div>
+                                )}
+                              </div>
+                              {event.raw && (
+                                <details className="mt-2">
+                                  <summary className="text-gray-500 text-xs cursor-pointer hover:text-gray-400">View raw data</summary>
+                                  <div className="bg-[#0a0e27] border border-[#1a2332] rounded p-2 mt-1 font-mono text-xs text-gray-400 max-h-32 overflow-auto">
+                                    <pre className="whitespace-pre-wrap">{JSON.stringify(event.raw, null, 2)}</pre>
+                                  </div>
+                                </details>
+                              )}
+                            </div>
+                          ))}
+                          {incident.events.length > 5 && (
+                            <p className="text-xs text-gray-500">+ {incident.events.length - 5} more events</p>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
@@ -485,10 +368,72 @@ export function IncidentsPage() {
         </div>
       )}
 
-      {/* Summary Footer */}
-      {!loading && (
-        <div className="bg-gray-800 border border-gray-700 rounded-lg p-4 text-center text-sm text-gray-400">
-          Showing {filteredIncidents.length} of {incidents.length} incidents from the last {hours} hour(s)
+      {/* Status Update Modal */}
+      {showStatusModal !== null && (
+        <div className="fixed inset-0 bg-black/75 flex items-center justify-center z-50 p-4">
+          <div className="bg-[#0f1629] border border-[#1a2332] rounded max-w-md w-full">
+            <div className="p-4 border-b border-[#1a2332] flex justify-between items-center">
+              <h3 className="text-base font-semibold text-gray-100">
+                {resolveMode === 'resolve' ? 'Resolve Incident' : 'Update Status'}
+              </h3>
+              <button 
+                onClick={() => { setShowStatusModal(null); setStatusNotes(''); }}
+                className="text-gray-400 hover:text-gray-300"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="p-4 space-y-4">
+              {resolveMode === 'status' && (
+                <div>
+                  <label className="block text-xs font-medium text-gray-400 mb-2">New Status</label>
+                  <select
+                    className="w-full bg-[#0a0e27] border border-[#1a2332] rounded px-3 py-2 text-sm text-gray-100 focus:border-blue-500 focus:outline-none"
+                    id="statusSelect"
+                  >
+                    <option value="open">Open</option>
+                    <option value="investigating">Investigating</option>
+                    <option value="resolved">Resolved</option>
+                  </select>
+                </div>
+              )}
+              <div>
+                <label className="block text-xs font-medium text-gray-400 mb-2">Notes</label>
+                <textarea
+                  value={statusNotes}
+                  onChange={(e) => setStatusNotes(e.target.value)}
+                  className="w-full bg-[#0a0e27] border border-[#1a2332] rounded px-3 py-2 text-sm text-gray-100 focus:border-blue-500 focus:outline-none"
+                  rows="3"
+                  placeholder="Add notes about this action..."
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => { setShowStatusModal(null); setStatusNotes(''); }}
+                  className="px-3 py-2 bg-[#1a2744] hover:bg-[#1f2d4f] border border-[#2a3f5f] rounded text-sm text-gray-300"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    if (resolveMode === 'resolve') {
+                      handleResolve(incidents[showStatusModal].incident_id, showStatusModal)
+                    } else {
+                      const newStatus = document.getElementById('statusSelect').value
+                      handleStatusUpdate(incidents[showStatusModal].incident_id, showStatusModal, newStatus)
+                    }
+                  }}
+                  className={`px-3 py-2 rounded text-sm text-white ${
+                    resolveMode === 'resolve' ? 'bg-green-600 hover:bg-green-700' : 'bg-blue-600 hover:bg-blue-700'
+                  }`}
+                >
+                  {resolveMode === 'resolve' ? 'Resolve' : 'Update'}
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

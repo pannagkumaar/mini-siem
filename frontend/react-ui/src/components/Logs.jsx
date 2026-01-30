@@ -58,33 +58,27 @@ export function LogsPage() {
   const getSeverityColor = (severity) => {
     switch (severity?.toLowerCase()) {
       case 'critical':
-        return 'bg-red-600 text-white'
+        return 'bg-red-900/50 text-red-200 border-red-800'
       case 'high':
-        return 'bg-orange-600 text-white'
+        return 'bg-orange-900/50 text-orange-200 border-orange-800'
       case 'medium':
-        return 'bg-yellow-600 text-white'
+        return 'bg-yellow-900/50 text-yellow-200 border-yellow-800'
       case 'low':
-        return 'bg-blue-600 text-white'
+        return 'bg-blue-900/50 text-blue-200 border-blue-800'
       default:
-        return 'bg-gray-600 text-white'
+        return 'bg-gray-800 text-gray-300 border-gray-700'
     }
   }
 
   const getSourceColor = (source) => {
-    switch (source?.toLowerCase()) {
-      case 'windows':
-        return 'bg-blue-700'
-      case 'linux':
-        return 'bg-orange-700'
-      case 'firewall':
-        return 'bg-red-700'
-      case 'network':
-        return 'bg-purple-700'
-      case 'app':
-        return 'bg-green-700'
-      default:
-        return 'bg-gray-700'
+    const colors = {
+      'windows': 'bg-blue-900/50 text-blue-200 border-blue-800',
+      'linux': 'bg-orange-900/50 text-orange-200 border-orange-800',
+      'firewall': 'bg-red-900/50 text-red-200 border-red-800',
+      'network': 'bg-purple-900/50 text-purple-200 border-purple-800',
+      'app': 'bg-green-900/50 text-green-200 border-green-800',
     }
+    return colors[source?.toLowerCase()] || 'bg-gray-800 text-gray-300 border-gray-700'
   }
 
   const severityCounts = logs.reduce((acc, log) => {
@@ -103,12 +97,15 @@ export function LogsPage() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold">📋 Security Logs</h1>
+        <div>
+          <h2 className="text-2xl font-semibold text-gray-100">Security Logs</h2>
+          <p className="text-sm text-gray-500 mt-1">Raw log data</p>
+        </div>
         <div className="flex gap-3">
           <select
             value={hours}
             onChange={(e) => setHours(parseInt(e.target.value))}
-            className="bg-gray-700 text-white px-4 py-2 rounded border border-gray-600 hover:border-gray-500"
+            className="bg-[#0f1629] border border-[#1a2332] text-gray-300 px-3 py-2 rounded text-sm focus:border-blue-500 focus:outline-none"
           >
             <option value="1">Last 1 hour</option>
             <option value="6">Last 6 hours</option>
@@ -118,7 +115,7 @@ export function LogsPage() {
           <select
             value={limit}
             onChange={(e) => setLimit(parseInt(e.target.value))}
-            className="bg-gray-700 text-white px-4 py-2 rounded border border-gray-600 hover:border-gray-500"
+            className="bg-[#0f1629] border border-[#1a2332] text-gray-300 px-3 py-2 rounded text-sm focus:border-blue-500 focus:outline-none"
           >
             <option value="50">Show: 50</option>
             <option value="100">Show: 100</option>
@@ -129,9 +126,8 @@ export function LogsPage() {
       </div>
 
       {error && (
-        <div className="bg-red-900 border border-red-700 rounded-lg p-4 text-red-100">
-          <p className="font-bold">⚠️ Error</p>
-          <p>{error}</p>
+        <div className="bg-red-900/20 border border-red-800 rounded px-4 py-3 text-red-200 text-sm">
+          <span className="font-medium">Error:</span> {error}
         </div>
       )}
 
@@ -139,15 +135,15 @@ export function LogsPage() {
       <div className="space-y-3">
         {/* Severity Filter */}
         {availableSeverities.length > 0 && (
-          <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
-            <p className="text-sm text-gray-400 mb-2 font-semibold">Filter by Severity:</p>
+          <div className="bg-[#0f1629] border border-[#1a2332] rounded p-4">
+            <p className="text-xs font-medium text-gray-500 mb-2 uppercase tracking-wide">Filter by Severity</p>
             <div className="flex gap-2 flex-wrap">
               <button
                 onClick={() => setFilters({...filters, severity: null})}
-                className={`px-4 py-2 rounded font-semibold transition text-sm ${
+                className={`px-3 py-1.5 rounded text-xs font-medium transition border ${
                   filters.severity === null 
-                    ? 'bg-blue-600 text-white' 
-                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    ? 'bg-blue-600 text-white border-blue-600' 
+                    : 'bg-[#0a0e27] text-gray-400 border-[#1a2332] hover:border-[#2a3f5f]'
                 }`}
               >
                 All ({logs.length})
@@ -156,10 +152,10 @@ export function LogsPage() {
                 <button
                   key={severity}
                   onClick={() => setFilters({...filters, severity})}
-                  className={`px-4 py-2 rounded font-semibold capitalize transition text-sm ${
+                  className={`px-3 py-1.5 rounded text-xs font-medium capitalize transition border ${
                     filters.severity === severity
-                      ? `${getSeverityColor(severity)}`
-                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                      ? getSeverityColor(severity)
+                      : 'bg-[#0a0e27] text-gray-400 border-[#1a2332] hover:border-[#2a3f5f]'
                   }`}
                 >
                   {severity} ({severityCounts[severity.toLowerCase()] || 0})
@@ -171,15 +167,15 @@ export function LogsPage() {
 
         {/* Source Filter */}
         {availableSources.length > 0 && (
-          <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
-            <p className="text-sm text-gray-400 mb-2 font-semibold">Filter by Source:</p>
+          <div className="bg-[#0f1629] border border-[#1a2332] rounded p-4">
+            <p className="text-xs font-medium text-gray-500 mb-2 uppercase tracking-wide">Filter by Source</p>
             <div className="flex gap-2 flex-wrap">
               <button
                 onClick={() => setFilters({...filters, source: null})}
-                className={`px-4 py-2 rounded font-semibold transition text-sm ${
+                className={`px-3 py-1.5 rounded text-xs font-medium transition border ${
                   filters.source === null 
-                    ? 'bg-blue-600 text-white' 
-                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    ? 'bg-blue-600 text-white border-blue-600' 
+                    : 'bg-[#0a0e27] text-gray-400 border-[#1a2332] hover:border-[#2a3f5f]'
                 }`}
               >
                 All Sources
@@ -188,10 +184,10 @@ export function LogsPage() {
                 <button
                   key={source}
                   onClick={() => setFilters({...filters, source})}
-                  className={`px-4 py-2 rounded font-semibold capitalize transition text-sm text-white ${
+                  className={`px-3 py-1.5 rounded text-xs font-medium capitalize transition border ${
                     filters.source === source
-                      ? `${getSourceColor(source)} ring-2 ring-white`
-                      : `${getSourceColor(source)} opacity-75 hover:opacity-100`
+                      ? getSourceColor(source)
+                      : 'bg-[#0a0e27] text-gray-400 border-[#1a2332] hover:border-[#2a3f5f]'
                   }`}
                 >
                   {source} ({sourceCounts[source.toLowerCase()] || 0})
@@ -203,164 +199,115 @@ export function LogsPage() {
 
         {/* Event Type Filter */}
         {availableEventTypes.length > 0 && (
-          <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
-            <p className="text-sm text-gray-400 mb-2 font-semibold">Filter by Event Type:</p>
+          <div className="bg-[#0f1629] border border-[#1a2332] rounded p-4">
+            <p className="text-xs font-medium text-gray-500 mb-2 uppercase tracking-wide">Filter by Event Type</p>
             <div className="flex gap-2 flex-wrap">
-              <select
-                value={filters.event_type || ''}
-                onChange={(e) => setFilters({...filters, event_type: e.target.value || null})}
-                className="bg-gray-700 text-white px-4 py-2 rounded border border-gray-600 hover:border-gray-500 text-sm"
+              <button
+                onClick={() => setFilters({...filters, event_type: null})}
+                className={`px-3 py-1.5 rounded text-xs font-medium transition border ${
+                  filters.event_type === null 
+                    ? 'bg-blue-600 text-white border-blue-600' 
+                    : 'bg-[#0a0e27] text-gray-400 border-[#1a2332] hover:border-[#2a3f5f]'
+                }`}
               >
-                <option value="">All Event Types</option>
-                {availableEventTypes.map(eventType => (
-                  <option key={eventType} value={eventType}>{eventType}</option>
-                ))}
-              </select>
+                All Events
+              </button>
+              {availableEventTypes.map(eventType => (
+                <button
+                  key={eventType}
+                  onClick={() => setFilters({...filters, event_type: eventType})}
+                  className={`px-3 py-1.5 rounded text-xs font-medium transition border ${
+                    filters.event_type === eventType
+                      ? 'bg-blue-900/50 text-blue-200 border-blue-800'
+                      : 'bg-[#0a0e27] text-gray-400 border-[#1a2332] hover:border-[#2a3f5f]'
+                  }`}
+                >
+                  {eventType}
+                </button>
+              ))}
             </div>
           </div>
         )}
       </div>
 
       {/* Logs List */}
-      {loading && logs.length === 0 ? (
-        <div className="bg-gray-800 border border-gray-700 rounded-lg p-12 text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-400 mx-auto mb-4"></div>
-          <p className="text-gray-400">Loading logs...</p>
+      {loading ? (
+        <div className="bg-[#0f1629] border border-[#1a2332] rounded p-12 text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-2 border-blue-500 border-t-transparent mx-auto mb-4"></div>
+          <p className="text-gray-400 text-sm">Loading logs</p>
         </div>
       ) : logs.length === 0 ? (
-        <div className="bg-gray-800 border border-gray-700 rounded-lg p-12 text-center">
-          <p className="text-gray-400 text-lg">No logs found matching your criteria</p>
+        <div className="bg-[#0f1629] border border-[#1a2332] rounded p-12 text-center">
+          <p className="text-gray-400">No logs found</p>
         </div>
       ) : (
-        <div className="space-y-3">
-          {logs.map((log) => (
-            <div
-              key={log._id}
-              className="bg-gray-800 border border-gray-700 rounded-lg hover:border-gray-600 transition cursor-pointer"
-              onClick={() => setExpandedId(expandedId === log._id ? null : log._id)}
+        <div className="space-y-2">
+          {logs.map((log, idx) => (
+            <div 
+              key={idx}
+              className="bg-[#0f1629] border border-[#1a2332] rounded overflow-hidden"
             >
-              {/* Log Header */}
-              <div className="p-4">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className={`px-2 py-1 rounded text-xs font-bold ${getSeverityColor(log.severity)}`}>
-                        {log.severity?.toUpperCase()}
-                      </span>
-                      <span className={`px-2 py-1 rounded text-xs font-bold text-white ${getSourceColor(log.source)}`}>
-                        {log.source?.toUpperCase()}
-                      </span>
-                      <span className="text-xs text-gray-500 bg-gray-700 px-2 py-1 rounded font-mono">{log.event_type}</span>
-                    </div>
-                    
-                    {/* Quick Info */}
-                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm mt-3">
-                      {log.host && (
-                        <div className="text-gray-400">
-                          <span className="text-gray-500 block text-xs">Host</span>
-                          <span className="text-blue-300 font-mono">{log.host}</span>
-                        </div>
-                      )}
-                      {log.user && (
-                        <div className="text-gray-400">
-                          <span className="text-gray-500 block text-xs">User</span>
-                          <span className="text-green-300">{log.user}</span>
-                        </div>
-                      )}
-                      {log.ip && (
-                        <div className="text-gray-400">
-                          <span className="text-gray-500 block text-xs">IP Address</span>
-                          <span className="text-yellow-300 font-mono">{log.ip}</span>
-                        </div>
-                      )}
-                      {log.timestamp && (
-                        <div className="text-gray-400">
-                          <span className="text-gray-500 block text-xs">Timestamp</span>
-                          <span className="text-purple-300 text-xs">{new Date(log.timestamp).toLocaleString()}</span>
-                        </div>
-                      )}
-                      <div className="text-right">
-                        <span className="text-xl text-gray-500">{expandedId === log._id ? '▼' : '▶'}</span>
-                      </div>
-                    </div>
+              <div 
+                className="p-3 cursor-pointer hover:bg-[#151b2e] transition"
+                onClick={() => setExpandedId(expandedId === idx ? null : idx)}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3 flex-1">
+                    <span className="text-gray-600 text-xs font-mono">
+                      {new Date(log.timestamp).toLocaleString()}
+                    </span>
+                    <span className={`px-2 py-0.5 rounded text-xs font-medium border ${getSeverityColor(log.severity)}`}>
+                      {log.severity}
+                    </span>
+                    <span className={`px-2 py-0.5 rounded text-xs font-medium border ${getSourceColor(log.source)}`}>
+                      {log.source}
+                    </span>
+                    <span className="text-sm text-gray-300">{log.event_type}</span>
                   </div>
+                  <svg 
+                    className={`w-5 h-5 text-gray-500 transition-transform ${expandedId === idx ? 'rotate-180' : ''}`}
+                    fill="none" 
+                    stroke="currentColor" 
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
+                <div className="flex items-center space-x-4 mt-2 text-xs text-gray-400">
+                  <span>Host: {log.host || 'N/A'}</span>
+                  <span>User: {log.user || 'N/A'}</span>
+                  {log.ip && <span>IP: {log.ip}</span>}
                 </div>
               </div>
 
-              {/* Expanded Details */}
-              {expandedId === log._id && (
-                <div className="border-t border-gray-700 bg-gray-900 p-4 space-y-4">
-                  {/* Field Details */}
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                    {log.timestamp && (
-                      <div>
-                        <h4 className="text-xs font-bold text-gray-400 uppercase mb-1">Timestamp</h4>
-                        <p className="text-sm text-gray-300">{new Date(log.timestamp).toISOString()}</p>
-                      </div>
-                    )}
-                    {log.source && (
-                      <div>
-                        <h4 className="text-xs font-bold text-gray-400 uppercase mb-1">Source</h4>
-                        <p className="text-sm text-gray-300 capitalize">{log.source}</p>
-                      </div>
-                    )}
-                    {log.event_type && (
-                      <div>
-                        <h4 className="text-xs font-bold text-gray-400 uppercase mb-1">Event Type</h4>
-                        <p className="text-sm text-gray-300 font-mono">{log.event_type}</p>
-                      </div>
-                    )}
-                    {log.host && (
-                      <div>
-                        <h4 className="text-xs font-bold text-gray-400 uppercase mb-1">Host</h4>
-                        <p className="text-sm text-gray-300 font-mono">{log.host}</p>
-                      </div>
-                    )}
-                    {log.user && (
-                      <div>
-                        <h4 className="text-xs font-bold text-gray-400 uppercase mb-1">User</h4>
-                        <p className="text-sm text-gray-300">{log.user}</p>
-                      </div>
-                    )}
-                    {log.ip && (
-                      <div>
-                        <h4 className="text-xs font-bold text-gray-400 uppercase mb-1">IP Address</h4>
-                        <p className="text-sm text-gray-300 font-mono">{log.ip}</p>
-                      </div>
-                    )}
-                    {log.severity && (
-                      <div>
-                        <h4 className="text-xs font-bold text-gray-400 uppercase mb-1">Severity</h4>
-                        <p className="text-sm text-gray-300 capitalize">{log.severity}</p>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Raw JSON */}
-                  {log.raw && (
+              {expandedId === idx && (
+                <div className="px-3 pb-3 border-t border-[#1a2332] pt-3 bg-[#0a0e27]">
+                  {log.raw ? (
                     <div>
-                      <h4 className="text-sm font-bold text-gray-300 mb-2 uppercase">Raw Log Data</h4>
-                      <div className="bg-gray-800 rounded p-3 font-mono text-xs text-gray-300 overflow-x-auto max-h-64 overflow-y-auto">
-                        <pre>{JSON.stringify(log.raw, null, 2)}</pre>
+                      <h4 className="text-xs font-medium text-gray-500 mb-2 uppercase tracking-wide">Raw Log Data</h4>
+                      <div className="bg-[#0f1629] border border-[#1a2332] rounded p-3 font-mono text-xs text-gray-300 max-h-96 overflow-auto">
+                        <pre className="whitespace-pre-wrap">{JSON.stringify(log.raw, null, 2)}</pre>
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <h4 className="text-xs font-medium text-gray-500 mb-2 uppercase tracking-wide">Log Fields</h4>
+                      <div className="grid grid-cols-2 gap-3 text-xs">
+                        {Object.entries(log).map(([key, value]) => (
+                          key !== 'raw' && (
+                            <div key={key} className="flex justify-between">
+                              <span className="text-gray-500">{key}:</span>
+                              <span className="text-gray-300 font-mono">{String(value)}</span>
+                            </div>
+                          )
+                        ))}
                       </div>
                     </div>
                   )}
-
-                  {/* Log ID */}
-                  <div className="text-xs text-gray-500 pt-2 border-t border-gray-700">
-                    <span className="font-mono">ID: {log._id}</span>
-                  </div>
                 </div>
               )}
             </div>
           ))}
-        </div>
-      )}
-
-      {/* Summary Footer */}
-      {!loading && (
-        <div className="bg-gray-800 border border-gray-700 rounded-lg p-4 text-center text-sm text-gray-400">
-          Showing {logs.length} of {logs.length} logs from the last {hours} hour(s)
         </div>
       )}
     </div>

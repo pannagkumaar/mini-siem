@@ -23,15 +23,15 @@ export function Dashboard() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        setLoading(true)
-        const statsResponse = await getStats()
-        const summaryResponse = await getSummary()
-        
+        const [statsResponse, summaryResponse] = await Promise.all([
+          getStats(),
+          getSummary(),
+        ])
         setStats(statsResponse.data)
         setSummary(summaryResponse.data)
         setError(null)
       } catch (err) {
-        setError(err.message || 'Failed to load dashboard data')
+        setError(err.message || 'Failed to fetch dashboard data')
         console.error('Error fetching data:', err)
       } finally {
         setLoading(false)
@@ -47,141 +47,128 @@ export function Dashboard() {
   const getSeverityColor = (severity) => {
     switch (severity?.toLowerCase()) {
       case 'critical':
-        return 'bg-red-600 text-white'
+        return 'bg-red-900/50 text-red-200 border-red-800'
       case 'high':
-        return 'bg-orange-600 text-white'
+        return 'bg-orange-900/50 text-orange-200 border-orange-800'
       case 'medium':
-        return 'bg-yellow-600 text-white'
+        return 'bg-yellow-900/50 text-yellow-200 border-yellow-800'
       case 'low':
-        return 'bg-blue-600 text-white'
+        return 'bg-blue-900/50 text-blue-200 border-blue-800'
       default:
-        return 'bg-gray-600 text-white'
+        return 'bg-gray-800 text-gray-300 border-gray-700'
     }
   }
 
-  const getSeverityTextColor = (severity) => {
+  const getSeverityBarColor = (severity) => {
     switch (severity?.toLowerCase()) {
       case 'critical':
-        return 'text-red-400'
+        return 'bg-red-500'
       case 'high':
-        return 'text-orange-400'
+        return 'bg-orange-500'
       case 'medium':
-        return 'text-yellow-400'
+        return 'bg-yellow-500'
       case 'low':
-        return 'text-blue-400'
+        return 'bg-blue-500'
       default:
-        return 'text-gray-400'
+        return 'bg-gray-500'
     }
   }
 
   if (loading && !stats.logs) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-400 mx-auto mb-4"></div>
-          <p className="text-xl text-gray-400">Loading dashboard...</p>
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="flex flex-col items-center space-y-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-2 border-blue-500 border-t-transparent"></div>
+          <div className="text-sm text-gray-400">Loading dashboard</div>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
+      {/* Header Controls */}
+      <div className="flex justify-between items-center">
+        <div>
+          <h2 className="text-2xl font-semibold text-gray-100">Overview</h2>
+          <p className="text-sm text-gray-500 mt-1">System metrics and security status</p>
+        </div>
+        <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-2 text-xs text-gray-500">
+            <div className={`h-1.5 w-1.5 rounded-full ${refreshInterval > 0 ? 'bg-green-500' : 'bg-gray-500'}`}></div>
+            <span>{refreshInterval > 0 ? `Auto-refresh ${refreshInterval / 1000}s` : 'Paused'}</span>
+          </div>
+          <button
+            onClick={() => setRefreshInterval(refreshInterval === 5000 ? 0 : 5000)}
+            className="px-3 py-1.5 bg-[#1a2744] hover:bg-[#1f2d4f] border border-[#2a3f5f] rounded text-xs text-gray-300 transition"
+          >
+            {refreshInterval > 0 ? 'Pause' : 'Resume'}
+          </button>
+        </div>
+      </div>
+
       {error && (
-        <div className="bg-red-900 border border-red-700 rounded-lg p-4 text-red-100">
-          <p className="font-bold">⚠️ Error</p>
-          <p>{error}</p>
+        <div className="bg-red-900/20 border border-red-800 rounded px-4 py-3 text-red-200 text-sm">
+          <span className="font-medium">Error:</span> {error}
         </div>
       )}
 
-      {/* Header with Refresh Control */}
-      <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold text-white">Dashboard</h1>
-        <select
-          value={refreshInterval}
-          onChange={(e) => setRefreshInterval(parseInt(e.target.value))}
-          className="bg-gray-700 text-white px-4 py-2 rounded border border-gray-600 hover:border-gray-500"
-        >
-          <option value="2000">Refresh: 2s</option>
-          <option value="5000">Refresh: 5s</option>
-          <option value="10000">Refresh: 10s</option>
-          <option value="30000">Refresh: 30s</option>
-        </select>
-      </div>
-
-      {/* Key Metrics Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-gray-800 border border-gray-700 rounded-lg p-6 hover:border-gray-500 transition">
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="bg-[#0f1629] border border-[#1a2332] rounded p-5">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-gray-400 text-sm mb-1">Total Logs</p>
-              <p className="text-4xl font-bold text-blue-400">{stats.logs?.toLocaleString() || 0}</p>
+              <p className="text-xs text-gray-500 uppercase tracking-wide">Total Logs</p>
+              <p className="text-3xl font-semibold text-gray-100 mt-2">{stats.logs.toLocaleString()}</p>
+              <p className="text-xs text-gray-600 mt-1">Events ingested</p>
             </div>
-            <span className="text-4xl">📋</span>
           </div>
-          <p className="text-xs text-gray-500 mt-2">All ingested logs</p>
         </div>
 
-        <div className="bg-gray-800 border border-gray-700 rounded-lg p-6 hover:border-gray-500 transition">
+        <div className="bg-[#0f1629] border border-[#1a2332] rounded p-5">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-gray-400 text-sm mb-1">Active Alerts</p>
-              <p className="text-4xl font-bold text-yellow-400">{stats.alerts?.toLocaleString() || 0}</p>
+              <p className="text-xs text-gray-500 uppercase tracking-wide">Active Alerts</p>
+              <p className="text-3xl font-semibold text-yellow-400 mt-2">{stats.alerts.toLocaleString()}</p>
+              <p className="text-xs text-gray-600 mt-1">Detection matches</p>
             </div>
-            <span className="text-4xl">🔔</span>
           </div>
-          <p className="text-xs text-gray-500 mt-2">Rule detections</p>
         </div>
 
-        <div className="bg-gray-800 border border-gray-700 rounded-lg p-6 hover:border-gray-500 transition">
+        <div className="bg-[#0f1629] border border-[#1a2332] rounded p-5">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-gray-400 text-sm mb-1">Open Incidents</p>
-              <p className="text-4xl font-bold text-red-400">{stats.incidents?.toLocaleString() || 0}</p>
+              <p className="text-xs text-gray-500 uppercase tracking-wide">Open Incidents</p>
+              <p className="text-3xl font-semibold text-red-400 mt-2">{stats.incidents.toLocaleString()}</p>
+              <p className="text-xs text-gray-600 mt-1">Correlated events</p>
             </div>
-            <span className="text-4xl">🚨</span>
           </div>
-          <p className="text-xs text-gray-500 mt-2">Correlated events</p>
-        </div>
-
-        <div className="bg-gray-800 border border-gray-700 rounded-lg p-6 hover:border-gray-500 transition">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-gray-400 text-sm mb-1">Active Rules</p>
-              <p className="text-4xl font-bold text-purple-400">{stats.detection_engine?.total_rules || 0}</p>
-            </div>
-            <span className="text-4xl">⚙️</span>
-          </div>
-          <p className="text-xs text-gray-500 mt-2">Detection rules</p>
         </div>
       </div>
 
-      {/* Severity Breakdown */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Log Severity */}
-        <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
-          <h3 className="text-xl font-bold text-white mb-4 flex items-center">
-            <span className="mr-2">📊</span> Log Severity Distribution
-          </h3>
+      {/* Severity Distribution */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="bg-[#0f1629] border border-[#1a2332] rounded p-5">
+          <h3 className="text-sm font-medium text-gray-300 mb-4">Log Severity Distribution</h3>
           <div className="space-y-3">
             {Object.keys(summary.log_severity || {}).length === 0 ? (
-              <p className="text-gray-400 text-sm">No logs yet</p>
+              <p className="text-gray-500 text-xs">No data available</p>
             ) : (
               Object.entries(summary.log_severity)
                 .sort((a, b) => b[1] - a[1])
                 .map(([severity, count]) => (
                   <div key={severity} className="flex items-center">
-                    <div className={`px-3 py-1 rounded text-xs font-bold capitalize min-w-[80px] text-center ${getSeverityColor(severity)}`}>
+                    <div className={`px-2 py-0.5 rounded text-xs font-medium capitalize min-w-[70px] text-center border ${getSeverityColor(severity)}`}>
                       {severity}
                     </div>
-                    <div className="flex-1 ml-4 flex items-center">
-                      <div className="bg-gray-700 rounded-full h-2 flex-1 overflow-hidden">
+                    <div className="flex-1 ml-3 flex items-center">
+                      <div className="bg-[#1a2332] rounded-full h-1.5 flex-1 overflow-hidden">
                         <div 
-                          className={`h-full bg-gradient-to-r ${severity === 'critical' ? 'from-red-500 to-red-400' : severity === 'high' ? 'from-orange-500 to-orange-400' : severity === 'medium' ? 'from-yellow-500 to-yellow-400' : 'from-blue-500 to-blue-400'}`}
+                          className={`h-full ${getSeverityBarColor(severity)}`}
                           style={{ width: `${(count / (summary.logs_total || 1)) * 100}%` }}
                         ></div>
                       </div>
-                      <span className="ml-2 text-gray-400 text-sm min-w-[50px] text-right">{count}</span>
+                      <span className="ml-2 text-gray-400 text-xs min-w-[40px] text-right">{count}</span>
                     </div>
                   </div>
                 ))
@@ -189,30 +176,27 @@ export function Dashboard() {
           </div>
         </div>
 
-        {/* Alert Severity */}
-        <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
-          <h3 className="text-xl font-bold text-white mb-4 flex items-center">
-            <span className="mr-2">🎯</span> Alert Severity Distribution
-          </h3>
+        <div className="bg-[#0f1629] border border-[#1a2332] rounded p-5">
+          <h3 className="text-sm font-medium text-gray-300 mb-4">Alert Severity Distribution</h3>
           <div className="space-y-3">
             {Object.keys(summary.alert_severity || {}).length === 0 ? (
-              <p className="text-gray-400 text-sm">No alerts yet</p>
+              <p className="text-gray-500 text-xs">No data available</p>
             ) : (
               Object.entries(summary.alert_severity)
                 .sort((a, b) => b[1] - a[1])
                 .map(([severity, count]) => (
                   <div key={severity} className="flex items-center">
-                    <div className={`px-3 py-1 rounded text-xs font-bold capitalize min-w-[80px] text-center ${getSeverityColor(severity)}`}>
+                    <div className={`px-2 py-0.5 rounded text-xs font-medium capitalize min-w-[70px] text-center border ${getSeverityColor(severity)}`}>
                       {severity}
                     </div>
-                    <div className="flex-1 ml-4 flex items-center">
-                      <div className="bg-gray-700 rounded-full h-2 flex-1 overflow-hidden">
+                    <div className="flex-1 ml-3 flex items-center">
+                      <div className="bg-[#1a2332] rounded-full h-1.5 flex-1 overflow-hidden">
                         <div 
-                          className={`h-full bg-gradient-to-r ${severity === 'critical' ? 'from-red-500 to-red-400' : severity === 'high' ? 'from-orange-500 to-orange-400' : severity === 'medium' ? 'from-yellow-500 to-yellow-400' : 'from-blue-500 to-blue-400'}`}
+                          className={`h-full ${getSeverityBarColor(severity)}`}
                           style={{ width: `${(count / (summary.alerts_total || 1)) * 100}%` }}
                         ></div>
                       </div>
-                      <span className="ml-2 text-gray-400 text-sm min-w-[50px] text-right">{count}</span>
+                      <span className="ml-2 text-gray-400 text-xs min-w-[40px] text-right">{count}</span>
                     </div>
                   </div>
                 ))
@@ -221,64 +205,39 @@ export function Dashboard() {
         </div>
       </div>
 
-      {/* Top Event Types */}
+      {/* Event Types */}
       {Object.keys(summary.log_event_types || {}).length > 0 && (
-        <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
-          <h3 className="text-xl font-bold text-white mb-4 flex items-center">
-            <span className="mr-2">📈</span> Top Event Types
-          </h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="bg-[#0f1629] border border-[#1a2332] rounded p-5">
+          <h3 className="text-sm font-medium text-gray-300 mb-4">Top Event Types</h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {Object.entries(summary.log_event_types)
               .sort((a, b) => b[1] - a[1])
               .slice(0, 8)
               .map(([eventType, count]) => (
-                <div key={eventType} className="bg-gray-700 rounded-lg p-4 text-center">
-                  <p className="text-gray-300 font-mono text-sm mb-2 truncate">{eventType}</p>
-                  <p className="text-2xl font-bold text-blue-400">{count}</p>
+                <div key={eventType} className="bg-[#1a2744]/50 border border-[#2a3f5f] rounded p-3 text-center">
+                  <p className="text-gray-400 text-xs truncate font-mono">{eventType}</p>
+                  <p className="text-xl font-semibold text-gray-200 mt-1">{count}</p>
                 </div>
               ))}
           </div>
         </div>
       )}
 
-      {/* Detection Engine Info */}
+      {/* Detection Engine Stats */}
       {stats.detection_engine && (
-        <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
-          <h3 className="text-xl font-bold text-blue-400 mb-4 flex items-center">
-            <span className="mr-2">⚙️</span> Detection Engine
-          </h3>
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-            <div className="bg-gray-700 rounded p-4">
-              <p className="text-gray-400 text-sm">Total Rules</p>
-              <p className="text-2xl font-bold text-blue-400">{stats.detection_engine.total_rules}</p>
+        <div className="bg-[#0f1629] border border-[#1a2332] rounded p-5">
+          <h3 className="text-sm font-medium text-gray-300 mb-4">Detection Engine</h3>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            <div className="bg-[#1a2744]/50 border border-[#2a3f5f] rounded p-3">
+              <p className="text-gray-500 text-xs">Total Rules</p>
+              <p className="text-2xl font-semibold text-gray-200 mt-1">{stats.detection_engine.total_rules}</p>
             </div>
             {stats.detection_engine.by_severity && Object.entries(stats.detection_engine.by_severity).map(([severity, count]) => (
-              <div key={severity} className="bg-gray-700 rounded p-4">
-                <p className="text-gray-400 text-sm capitalize">{severity} Rules</p>
-                <p className={`text-2xl font-bold ${getSeverityTextColor(severity)}`}>{count}</p>
+              <div key={severity} className="bg-[#1a2744]/50 border border-[#2a3f5f] rounded p-3">
+                <p className="text-gray-500 text-xs capitalize">{severity}</p>
+                <p className="text-2xl font-semibold text-gray-200 mt-1">{count}</p>
               </div>
             ))}
-          </div>
-        </div>
-      )}
-
-      {/* Correlation Engine Info */}
-      {stats.correlation_engine && (
-        <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
-          <h3 className="text-xl font-bold text-purple-400 mb-4 flex items-center">
-            <span className="mr-2">🔗</span> Correlation Engine
-          </h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="bg-gray-700 rounded p-4">
-              <p className="text-gray-400 text-sm">Patterns</p>
-              <p className="text-2xl font-bold text-purple-400">{stats.correlation_engine.patterns}</p>
-            </div>
-            {stats.correlation_engine.last_run && (
-              <div className="bg-gray-700 rounded p-4">
-                <p className="text-gray-400 text-sm">Last Run</p>
-                <p className="text-sm text-purple-300">{new Date(stats.correlation_engine.last_run).toLocaleTimeString()}</p>
-              </div>
-            )}
           </div>
         </div>
       )}

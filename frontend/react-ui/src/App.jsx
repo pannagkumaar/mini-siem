@@ -1,10 +1,10 @@
 import React, { useState } from 'react'
-import DashboardClean from './components/DashboardClean'
-import IncidentsPage from './components/IncidentsClean'
-import AlertsPage from './components/AlertsClean'
-import LogsPage from './components/LogsClean'
-import RulesClean from './components/RulesClean'
-import { SearchPage } from './components/SearchClean'
+import Dashboard from './components/Dashboard'
+import IncidentsPage from './components/Incidents'
+import AlertsPage from './components/Alerts'
+import LogsPage from './components/Logs'
+import Rules from './components/Rules'
+import { SearchPage } from './components/Search'
 import './index.css'
 
 export function App() {
@@ -22,7 +22,7 @@ export function App() {
   const renderPage = () => {
     switch (activePage) {
       case 'dashboard':
-        return <DashboardClean />
+        return <Dashboard />
       case 'incidents':
         return <IncidentsPage />
       case 'alerts':
@@ -32,9 +32,9 @@ export function App() {
       case 'logs':
         return <LogsPage />
       case 'rules':
-        return <RulesClean />
+        return <Rules />
       default:
-        return <DashboardClean />
+        return <Dashboard />
     }
   }
 

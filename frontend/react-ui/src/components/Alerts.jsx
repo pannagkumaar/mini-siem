@@ -1,6 +1,5 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { getAlerts } from './api'
-import { TestAIButton } from './TestAI'
 
 // API functions for AI analysis
 const analyzeAlertAI = async (alertId) => {
@@ -49,21 +48,44 @@ export function AlertsPage() {
   const [aiAnalyses, setAiAnalyses] = useState({})
   const [analyzingIds, setAnalyzingIds] = useState(new Set())
   const [aiStats, setAiStats] = useState(null)
+  const isFirstLoadRef = useRef(true)
 
   useEffect(() => {
     const fetchAlerts = async () => {
       try {
-        setLoading(true)
         const response = await getAlerts(hours, limit)
-        setAlerts(response.data.alerts || [])
+        const newAlerts = response.data.alerts || []
+        
+        setAlerts(prevAlerts => {
+          // For updates, preserve order and only update changed alerts
+          // Check if we have new alerts or if existing alerts changed
+          if (prevAlerts.length === 0 ||
+              newAlerts.length !== prevAlerts.length || 
+              !newAlerts.every((alert, idx) => 
+                prevAlerts[idx] && 
+                prevAlerts[idx]._id === alert._id &&
+                JSON.stringify(prevAlerts[idx]) === JSON.stringify(alert)
+              )) {
+            return newAlerts
+          }
+          
+          // No changes, keep the previous state to avoid re-render
+          return prevAlerts
+        })
+        
         setError(null)
         
-        // Load existing AI analyses for alerts
-        await loadAIAnalyses(response.data.alerts || [])
+        // Load existing AI analyses for new alerts
+        await loadAIAnalyses(newAlerts)
+        
+        // Only set loading to false on first load
+        if (isFirstLoadRef.current) {
+          setLoading(false)
+          isFirstLoadRef.current = false
+        }
       } catch (err) {
         setError(err.message || 'Failed to load alerts')
         console.error('Error fetching alerts:', err)
-      } finally {
         setLoading(false)
       }
     }
@@ -78,12 +100,15 @@ export function AlertsPage() {
       }
     }
 
+    // Initial fetch
     fetchAlerts()
     fetchAIStats()
+    
+    // Set up periodic updates (slower refresh to reduce flickering)
     const interval = setInterval(() => {
       fetchAlerts()
       fetchAIStats()
-    }, 10000) // Refresh every 10s
+    }, 15000) // Increased from 10s to 15s for smoother UX
 
     return () => clearInterval(interval)
   }, [hours, limit])
@@ -141,7 +166,7 @@ export function AlertsPage() {
     
     if (isAnalyzing) {
       return (
-        <div className="bg-blue-900/30 border border-blue-700 rounded-lg p-4">
+        <div className="bg-blue-900/30 border border-blue-700 rounded-lg p-4 mb-4">
           <div className="flex items-center gap-2">
             <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-blue-400"></div>
             <span className="text-blue-300 text-sm font-medium">🤖 AI analyzing alert...</span>
@@ -152,10 +177,10 @@ export function AlertsPage() {
     
     if (!analysis) {
       return (
-        <div className="bg-gray-800/50 border border-gray-600 rounded-lg p-4">
+        <div className="bg-gray-800/50 border border-gray-600 rounded-lg p-4 mb-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className="text-yellow-400 text-sm">🤖 AI Security Analysis</span>
+              <span className="text-yellow-400 text-sm font-medium">🤖 AI Security Analysis</span>
               {aiStats && aiStats.status === 'disabled' && (
                 <span className="text-xs text-red-400">(API key needed)</span>
               )}
@@ -173,7 +198,7 @@ export function AlertsPage() {
     }
     
     return (
-      <div className="bg-green-900/20 border border-green-700 rounded-lg p-4">
+      <div className="bg-green-900/20 border border-green-700 rounded-lg p-4 mb-4">
         <div className="flex items-center gap-2 mb-3">
           <span className="text-green-300 text-sm font-bold">🤖 AI Security Analysis</span>
           <span className="text-xs text-gray-400">
@@ -207,15 +232,15 @@ export function AlertsPage() {
   const getSeverityColor = (severity) => {
     switch (severity?.toLowerCase()) {
       case 'critical':
-        return 'bg-red-600 text-white'
+        return 'bg-red-900/50 text-red-200 border-red-800'
       case 'high':
-        return 'bg-orange-600 text-white'
+        return 'bg-orange-900/50 text-orange-200 border-orange-800'
       case 'medium':
-        return 'bg-yellow-600 text-white'
+        return 'bg-yellow-900/50 text-yellow-200 border-yellow-800'
       case 'low':
-        return 'bg-blue-600 text-white'
+        return 'bg-blue-900/50 text-blue-200 border-blue-800'
       default:
-        return 'bg-gray-600 text-white'
+        return 'bg-gray-800 text-gray-300 border-gray-700'
     }
   }
 
@@ -231,16 +256,13 @@ export function AlertsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Test AI Component */}
-      <TestAIButton />
-      
       {/* Header */}
-      <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-4">
+      <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold">🔔 Security Alerts</h1>
-          <p className="text-gray-400 mt-1">Real-time detection engine alerts with AI-powered analysis</p>
+          <h2 className="text-2xl font-semibold text-gray-100">Security Alerts</h2>
+          <p className="text-sm text-gray-500 mt-1">Detection rule matches with AI-powered analysis</p>
           {aiStats && (
-            <div className="mt-2 text-sm text-gray-500">
+            <div className="mt-2 text-xs text-gray-600">
               🤖 AI Agent: {aiStats.status === 'active' ? '✓ Active' : aiStats.status === 'disabled' ? '⚠ Disabled' : '❌ Error'} 
               {aiStats.total_analyses > 0 && ` | ${aiStats.total_analyses} analyses performed`}
             </div>
@@ -250,7 +272,7 @@ export function AlertsPage() {
           <select
             value={hours}
             onChange={(e) => setHours(parseInt(e.target.value))}
-            className="bg-gray-700 text-white px-4 py-2 rounded border border-gray-600 hover:border-gray-500"
+            className="bg-[#0f1629] border border-[#1a2332] text-gray-300 px-3 py-2 rounded text-sm focus:border-blue-500 focus:outline-none"
           >
             <option value="1">Last 1 hour</option>
             <option value="6">Last 6 hours</option>
@@ -260,7 +282,7 @@ export function AlertsPage() {
           <select
             value={limit}
             onChange={(e) => setLimit(parseInt(e.target.value))}
-            className="bg-gray-700 text-white px-4 py-2 rounded border border-gray-600 hover:border-gray-500"
+            className="bg-[#0f1629] border border-[#1a2332] text-gray-300 px-3 py-2 rounded text-sm focus:border-blue-500 focus:outline-none"
           >
             <option value="50">Show: 50</option>
             <option value="100">Show: 100</option>
@@ -271,177 +293,152 @@ export function AlertsPage() {
       </div>
 
       {error && (
-        <div className="bg-red-900 border border-red-700 rounded-lg p-4 text-red-100">
-          <p className="font-bold">⚠️ Error</p>
-          <p>{error}</p>
+        <div className="bg-red-900/20 border border-red-800 rounded px-4 py-3 text-red-200 text-sm">
+          <span className="font-medium">Error:</span> {error}
         </div>
       )}
 
       {/* Severity Filter Bar */}
-      <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
+      <div className="bg-[#0f1629] border border-[#1a2332] rounded p-4">
         <div className="flex gap-2 flex-wrap">
           <button
             onClick={() => setFilterSeverity(null)}
-            className={`px-4 py-2 rounded font-semibold transition ${
-              filterSeverity === null 
-                ? 'bg-blue-600 text-white' 
-                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+            className={`px-3 py-1.5 rounded text-xs font-medium transition border ${
+              filterSeverity === null
+                ? 'bg-blue-600 text-white border-blue-600'
+                : 'bg-[#0a0e27] text-gray-400 border-[#1a2332] hover:border-[#2a3f5f]'
             }`}
           >
             All ({alerts.length})
           </button>
-          {Object.entries(severityCounts).map(([severity, count]) => (
-            <button
-              key={severity}
-              onClick={() => setFilterSeverity(severity)}
-              className={`px-4 py-2 rounded font-semibold capitalize transition ${
-                filterSeverity === severity
-                  ? `bg-${severity === 'critical' ? 'red' : severity === 'high' ? 'orange' : severity === 'medium' ? 'yellow' : 'blue'}-600 text-white`
-                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-              }`}
-            >
-              {severity} ({count})
-            </button>
+          {['critical', 'high', 'medium', 'low'].map((severity) => (
+            severityCounts[severity] > 0 && (
+              <button
+                key={severity}
+                onClick={() => setFilterSeverity(severity)}
+                className={`px-3 py-1.5 rounded text-xs font-medium transition border capitalize ${
+                  filterSeverity === severity
+                    ? getSeverityColor(severity)
+                    : 'bg-[#0a0e27] text-gray-400 border-[#1a2332] hover:border-[#2a3f5f]'
+                }`}
+              >
+                {severity} ({severityCounts[severity]})
+              </button>
+            )
           ))}
         </div>
       </div>
 
       {/* Alerts List */}
-      {loading && alerts.length === 0 ? (
-        <div className="bg-gray-800 border border-gray-700 rounded-lg p-12 text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-400 mx-auto mb-4"></div>
-          <p className="text-gray-400">Loading alerts...</p>
+      {loading ? (
+        <div className="bg-[#0f1629] border border-[#1a2332] rounded p-12 text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-2 border-blue-500 border-t-transparent mx-auto mb-4"></div>
+          <p className="text-gray-400 text-sm">Loading alerts</p>
         </div>
       ) : filteredAlerts.length === 0 ? (
-        <div className="bg-gray-800 border border-gray-700 rounded-lg p-12 text-center">
-          <p className="text-gray-400 text-lg">No alerts detected</p>
+        <div className="bg-[#0f1629] border border-[#1a2332] rounded p-12 text-center">
+          <p className="text-gray-400">No alerts found</p>
         </div>
       ) : (
         <div className="space-y-3">
           {filteredAlerts.map((alert) => (
-            <div
+            <div 
               key={alert._id}
-              className="bg-gray-800 border border-gray-700 rounded-lg hover:border-gray-600 transition cursor-pointer"
-              onClick={() => setExpandedId(expandedId === alert._id ? null : alert._id)}
+              className="bg-[#0f1629] border border-[#1a2332] rounded overflow-hidden"
             >
-              {/* Alert Header */}
-              <div className="p-4">
-                <div className="flex items-start justify-between gap-4">
+              <div 
+                className="p-4 cursor-pointer hover:bg-[#151b2e] transition"
+                onClick={() => setExpandedId(expandedId === alert._id ? null : alert._id)}
+              >
+                <div className="flex items-start justify-between">
                   <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-2">
-                      <span className={`px-3 py-1 rounded text-sm font-bold ${getSeverityColor(alert.rule_severity)}`}>
-                        {alert.rule_severity?.toUpperCase()}
+                    <div className="flex items-center space-x-3 mb-2">
+                      <span className={`px-2 py-0.5 rounded text-xs font-medium border ${getSeverityColor(alert.rule_severity)}`}>
+                        {alert.rule_severity}
                       </span>
-                      <h3 className="text-lg font-bold text-white">{alert.rule_name}</h3>
+                      <span className="text-gray-600 text-xs">{new Date(alert.timestamp).toLocaleString()}</span>
                     </div>
-                    <p className="text-sm text-gray-400 mb-2">{alert.rule_id}</p>
-                    
-                    {/* Quick Info */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-                      {alert.matched_log?.host && (
-                        <div className="text-gray-400">
-                          <span className="text-gray-500">Host:</span> <span className="text-blue-300 font-mono">{alert.matched_log.host}</span>
-                        </div>
-                      )}
-                      {alert.matched_log?.user && (
-                        <div className="text-gray-400">
-                          <span className="text-gray-500">User:</span> <span className="text-blue-300">{alert.matched_log.user}</span>
-                        </div>
-                      )}
-                      {alert.matched_log?.event_type && (
-                        <div className="text-gray-400">
-                          <span className="text-gray-500">Event:</span> <span className="text-yellow-300 font-mono text-xs">{alert.matched_log.event_type}</span>
-                        </div>
-                      )}
-                      {alert.matched_log?.ip && (
-                        <div className="text-gray-400">
-                          <span className="text-gray-500">IP:</span> <span className="text-green-300 font-mono">{alert.matched_log.ip}</span>
-                        </div>
-                      )}
+                    <h3 className="text-base font-medium text-gray-100 mb-1">{alert.rule_name || 'Alert'}</h3>
+                    <div className="flex items-center space-x-4 text-sm text-gray-400">
+                      <span>Host: {alert.host || 'N/A'}</span>
+                      <span>User: {alert.user || 'N/A'}</span>
+                      {alert.ip && <span>IP: {alert.ip}</span>}
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className="text-xs text-gray-500">
-                      {new Date(alert.timestamp).toLocaleString()}
-                    </p>
-                    <span className="text-xl">{expandedId === alert._id ? '▼' : '▶'}</span>
-                  </div>
+                  <svg 
+                    className={`w-5 h-5 text-gray-500 transition-transform ${expandedId === alert._id ? 'rotate-180' : ''}`}
+                    fill="none" 
+                    stroke="currentColor" 
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
                 </div>
               </div>
 
-              {/* Expanded Details */}
               {expandedId === alert._id && (
-                <div className="border-t border-gray-700 bg-gray-900 p-4 space-y-4">
-                  {/* AI Analysis Section */}
-                  {renderAIRecommendations(alert._id)}
-                  
-                  <div>
-                    <h4 className="text-sm font-bold text-gray-300 mb-2 uppercase">Full Log Details</h4>
-                    <div className="bg-gray-800 rounded p-3 font-mono text-xs text-gray-300 overflow-x-auto max-h-64 overflow-y-auto">
-                      <pre>{JSON.stringify(alert.matched_log, null, 2)}</pre>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
+                <div className="px-4 pb-4 border-t border-[#1a2332] pt-4 bg-[#0a0e27]">
+                  <div className="space-y-4">
+                    {/* AI Analysis Section */}
+                    {renderAIRecommendations(alert._id)}
+                    
                     <div>
-                      <h4 className="text-sm font-bold text-gray-300 mb-2 uppercase">Alert Details</h4>
-                      <div className="space-y-2 text-sm">
-                        <div className="flex justify-between">
-                          <span className="text-gray-500">Alert ID:</span>
-                          <span className="text-gray-300 font-mono">{alert._id}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-500">Timestamp:</span>
-                          <span className="text-gray-300">{new Date(alert.timestamp).toISOString()}</span>
-                        </div>
-                        <div className="flex justify-between">
+                      <h4 className="text-xs font-medium text-gray-500 mb-2 uppercase tracking-wide">Alert Details</h4>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                        <div>
                           <span className="text-gray-500">Rule ID:</span>
-                          <span className="text-gray-300 font-mono">{alert.rule_id}</span>
+                          <span className="text-gray-300 font-mono text-xs ml-2">{alert.rule_id || 'N/A'}</span>
+                        </div>
+                        <div>
+                          <span className="text-gray-500">Severity:</span>
+                          <span className="text-gray-300 ml-2 capitalize">{alert.rule_severity || 'N/A'}</span>
+                        </div>
+                        {alert.mitre_tags && alert.mitre_tags.length > 0 && (
+                          <div className="col-span-2">
+                            <span className="text-gray-500">MITRE ATT&CK:</span>
+                            <span className="text-gray-300 ml-2">{alert.mitre_tags.join(', ')}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {alert.matched_log && (
+                      <div>
+                        <h4 className="text-xs font-medium text-gray-500 mb-2 uppercase tracking-wide">Matched Log Event</h4>
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                          <div>
+                            <span className="text-gray-500">Event Type:</span>
+                            <span className="text-gray-300 ml-2">{alert.matched_log.event_type || 'N/A'}</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-500">Source:</span>
+                            <span className="text-gray-300 ml-2">{alert.matched_log.source || 'N/A'}</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-500">Timestamp:</span>
+                            <span className="text-gray-300 ml-2 text-xs">{new Date(alert.matched_log.timestamp).toLocaleString()}</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-500">Severity:</span>
+                            <span className="text-gray-300 ml-2 capitalize">{alert.matched_log.severity || 'N/A'}</span>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                    <div>
-                      <h4 className="text-sm font-bold text-gray-300 mb-2 uppercase">Source Details</h4>
-                      <div className="space-y-2 text-sm">
-                        {alert.matched_log?.source && (
-                          <div className="flex justify-between">
-                            <span className="text-gray-500">Source:</span>
-                            <span className="text-gray-300 capitalize">{alert.matched_log.source}</span>
-                          </div>
-                        )}
-                        {alert.matched_log?.severity && (
-                          <div className="flex justify-between">
-                            <span className="text-gray-500">Severity:</span>
-                            <span className="text-gray-300 capitalize">{alert.matched_log.severity}</span>
-                          </div>
-                        )}
-                        {alert.matched_log?.event_type && (
-                          <div className="flex justify-between">
-                            <span className="text-gray-500">Event Type:</span>
-                            <span className="text-gray-300 font-mono text-xs">{alert.matched_log.event_type}</span>
-                          </div>
-                        )}
+                    )}
+                    
+                    {alert.matched_log?.raw && (
+                      <div>
+                        <h4 className="text-xs font-medium text-gray-500 mb-2 uppercase tracking-wide">Raw Log Data</h4>
+                        <div className="bg-[#0f1629] border border-[#1a2332] rounded p-3 font-mono text-xs text-gray-300 max-h-60 overflow-auto">
+                          <pre className="whitespace-pre-wrap">{JSON.stringify(alert.matched_log.raw, null, 2)}</pre>
+                        </div>
                       </div>
-                    </div>
-                  </div>
-
-                  {/* Raw Log Button */}
-                  <div>
-                    <button className="mt-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm font-semibold transition">
-                      📋 View Original Log
-                    </button>
+                    )}
                   </div>
                 </div>
               )}
             </div>
           ))}
-        </div>
-      )}
-
-      {/* Summary Footer */}
-      {!loading && (
-        <div className="bg-gray-800 border border-gray-700 rounded-lg p-4 text-center text-sm text-gray-400">
-          Showing {filteredAlerts.length} of {alerts.length} alerts from the last {hours} hour(s)
         </div>
       )}
     </div>
