@@ -13,6 +13,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the API code
 COPY ingestion/api-python/main.py .
 COPY ingestion/api-python/query_parser.py .
+COPY ingestion/api-python/ai_agent ./ai_agent
 
 # Copy the parser, detection, and correlation modules (needed for imports)
 COPY parser ./parser

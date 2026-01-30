@@ -3,14 +3,25 @@ import json
 import sys
 import os
 import hashlib
+import asyncio
 from datetime import datetime, timedelta
-from typing import List, Dict, Any, Union
+from typing import List, Dict, Any, Union, Optional
 from fastapi import FastAPI, Request, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from opensearchpy import OpenSearch
 import threading
 
 from parser.normalizer import normalize_log, validate_normalized_log
+
+# Import AI agent
+try:
+    from ai_agent.agent import AISecurityAgent
+    AI_AGENT_AVAILABLE = True
+    print("✓ AI Agent module loaded successfully")
+except ImportError as e:
+    print(f"Warning: AI Agent not available: {e}")
+    AISecurityAgent = None
+    AI_AGENT_AVAILABLE = False
 
 # Import query parser - available in same directory as main.py
 QueryParser = None
@@ -97,6 +108,21 @@ try:
 except Exception as e:
     logger.error(f"Failed to connect to OpenSearch: {e}")
     opensearch_client = None
+
+# Initialize AI agent
+ai_agent = None
+if AI_AGENT_AVAILABLE and opensearch_client:
+    try:
+        ai_agent = AISecurityAgent(opensearch_client)
+        if ai_agent.groq_api_key:
+            logger.info("✓ AI Security Agent initialized with Groq API")
+        else:
+            logger.warning("⚠ AI Agent initialized but no Groq API key provided")
+    except Exception as e:
+        logger.error(f"Failed to initialize AI agent: {e}")
+        ai_agent = None
+else:
+    logger.warning("⚠ AI Agent not available")
 
 # Detection and correlation engines (lazy loaded)
 detection_engine = None
@@ -917,6 +943,112 @@ async def create_custom_rule(request: Request):
         import traceback
         logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Failed to create rule: {str(e)}")
+
+
+@app.post("/ai/analyze/{alert_id}")
+async def analyze_alert_ai(alert_id: str):
+    """
+    Analyze a specific alert using AI and provide recommendations.
+    """
+    if not ai_agent or not ai_agent.groq_api_key:
+        raise HTTPException(status_code=503, detail="AI agent not available or not configured")
+    
+    try:
+        analysis = await ai_agent.analyze_alert(alert_id)
+        
+        if analysis:
+            return {
+                "success": True,
+                "alert_id": alert_id,
+                "analysis": analysis
+            }
+        else:
+            raise HTTPException(status_code=404, detail="Alert not found or analysis failed")
+            
+    except Exception as e:
+        logger.error(f"Error analyzing alert {alert_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+
+
+@app.get("/ai/analysis/{alert_id}")
+async def get_alert_analysis(alert_id: str):
+    """
+    Get existing AI analysis for an alert.
+    """
+    if not ai_agent:
+        raise HTTPException(status_code=503, detail="AI agent not available")
+    
+    try:
+        analysis = await ai_agent.get_analysis_for_alert(alert_id)
+        
+        if analysis:
+            return {
+                "success": True,
+                "alert_id": alert_id,
+                "analysis": analysis
+            }
+        else:
+            return {
+                "success": True,
+                "alert_id": alert_id,
+                "analysis": None,
+                "message": "No analysis found for this alert"
+            }
+            
+    except Exception as e:
+        logger.error(f"Error fetching analysis for alert {alert_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch analysis: {str(e)}")
+
+
+@app.post("/ai/analyze/batch")
+async def analyze_recent_alerts():
+    """
+    Trigger AI analysis of recent high-severity alerts.
+    """
+    if not ai_agent or not ai_agent.groq_api_key:
+        raise HTTPException(status_code=503, detail="AI agent not available or not configured")
+    
+    try:
+        # Run analysis in background
+        asyncio.create_task(ai_agent.analyze_recent_alerts(hours=1, max_alerts=5))
+        
+        return {
+            "success": True,
+            "message": "Batch analysis started for recent high-severity alerts"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error starting batch analysis: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to start batch analysis: {str(e)}")
+
+
+@app.get("/ai/stats")
+async def get_ai_stats():
+    """
+    Get AI agent statistics and status.
+    """
+    if not ai_agent:
+        return {
+            "status": "disabled",
+            "message": "AI agent not available"
+        }
+    
+    try:
+        stats = ai_agent.get_analysis_summary_stats()
+        return {
+            "success": True,
+            "stats": stats
+        }
+        
+    except Exception as e:
+        logger.error(f"Error fetching AI stats: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "stats": {
+                "status": "error"
+            }
+        }
 
 
 if __name__ == "__main__":

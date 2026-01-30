@@ -2,7 +2,7 @@ import requests
 import time
 
 OPENSEARCH_HOST = "http://localhost:9200"
-INDICES = ["logs", "alerts", "incidents"]
+INDICES = ["logs", "alerts", "incidents", "ai_analyses"]
 
 # A simple mapping for the logs index to ensure timestamp is handled correctly
 LOGS_MAPPING = {
@@ -18,6 +18,23 @@ LOGS_MAPPING = {
             "type": "object",
             "enabled": False  # Raw log can be schemaless, disable dynamic mapping
         }
+    }
+}
+
+AI_ANALYSES_MAPPING = {
+    "properties": {
+        "alert_id": {"type": "keyword"},
+        "analysis": {
+            "type": "object",
+            "properties": {
+                "threat_assessment": {"type": "text"},
+                "root_cause": {"type": "text"},
+                "immediate_actions": {"type": "text"},
+                "investigation_steps": {"type": "text"},
+                "prevention_measures": {"type": "text"}
+            }
+        },
+        "created_at": {"type": "date"}
     }
 }
 
@@ -70,6 +87,8 @@ def main():
     for index in INDICES:
         if index == "logs":
             create_index(index, LOGS_MAPPING)
+        elif index == "ai_analyses":
+            create_index(index, AI_ANALYSES_MAPPING)
         else:
             create_index(index)
     print("Database initialization complete.")

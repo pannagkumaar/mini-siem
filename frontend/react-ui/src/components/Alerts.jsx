@@ -1,5 +1,42 @@
 import React, { useState, useEffect } from 'react'
 import { getAlerts } from './api'
+import { TestAIButton } from './TestAI'
+
+// API functions for AI analysis
+const analyzeAlertAI = async (alertId) => {
+  const response = await fetch(`http://localhost:8000/ai/analyze/${alertId}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  })
+  
+  if (!response.ok) {
+    throw new Error(`AI analysis failed: ${response.statusText}`)
+  }
+  
+  return response.json()
+}
+
+const getAlertAnalysis = async (alertId) => {
+  const response = await fetch(`http://localhost:8000/ai/analysis/${alertId}`)
+  
+  if (!response.ok) {
+    throw new Error(`Failed to fetch analysis: ${response.statusText}`)
+  }
+  
+  return response.json()
+}
+
+const getAIStats = async () => {
+  const response = await fetch(`http://localhost:8000/ai/stats`)
+  
+  if (!response.ok) {
+    throw new Error(`Failed to fetch AI stats: ${response.statusText}`)
+  }
+  
+  return response.json()
+}
 
 export function AlertsPage() {
   const [alerts, setAlerts] = useState([])
@@ -9,6 +46,9 @@ export function AlertsPage() {
   const [limit, setLimit] = useState(100)
   const [expandedId, setExpandedId] = useState(null)
   const [filterSeverity, setFilterSeverity] = useState(null)
+  const [aiAnalyses, setAiAnalyses] = useState({})
+  const [analyzingIds, setAnalyzingIds] = useState(new Set())
+  const [aiStats, setAiStats] = useState(null)
 
   useEffect(() => {
     const fetchAlerts = async () => {
@@ -17,6 +57,9 @@ export function AlertsPage() {
         const response = await getAlerts(hours, limit)
         setAlerts(response.data.alerts || [])
         setError(null)
+        
+        // Load existing AI analyses for alerts
+        await loadAIAnalyses(response.data.alerts || [])
       } catch (err) {
         setError(err.message || 'Failed to load alerts')
         console.error('Error fetching alerts:', err)
@@ -25,11 +68,141 @@ export function AlertsPage() {
       }
     }
 
+    // Fetch AI stats
+    const fetchAIStats = async () => {
+      try {
+        const response = await getAIStats()
+        setAiStats(response.stats)
+      } catch (err) {
+        console.error('Error fetching AI stats:', err)
+      }
+    }
+
     fetchAlerts()
-    const interval = setInterval(fetchAlerts, 10000) // Refresh every 10s
+    fetchAIStats()
+    const interval = setInterval(() => {
+      fetchAlerts()
+      fetchAIStats()
+    }, 10000) // Refresh every 10s
 
     return () => clearInterval(interval)
   }, [hours, limit])
+
+  const loadAIAnalyses = async (alertsList) => {
+    const analyses = {}
+    
+    // Load existing analyses for all alerts
+    for (const alert of alertsList) {
+      try {
+        const response = await getAlertAnalysis(alert._id)
+        if (response.analysis) {
+          analyses[alert._id] = response.analysis
+        }
+      } catch (err) {
+        // Analysis doesn't exist yet - that's okay
+      }
+    }
+    
+    setAiAnalyses(analyses)
+  }
+
+  const handleAnalyzeAlert = async (alertId) => {
+    setAnalyzingIds(prev => new Set(prev).add(alertId))
+    
+    try {
+      const response = await analyzeAlertAI(alertId)
+      
+      if (response.success) {
+        setAiAnalyses(prev => ({
+          ...prev,
+          [alertId]: response.analysis
+        }))
+      }
+    } catch (err) {
+      console.error('AI analysis failed:', err)
+      // Show more user-friendly error message
+      if (err.message.includes('503')) {
+        alert('AI agent is not available or needs configuration. Please check that the Groq API key is set.')
+      } else {
+        alert('AI analysis failed: ' + err.message)
+      }
+    } finally {
+      setAnalyzingIds(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(alertId)
+        return newSet
+      })
+    }
+  }
+
+  const renderAIRecommendations = (alertId) => {
+    const analysis = aiAnalyses[alertId]
+    const isAnalyzing = analyzingIds.has(alertId)
+    
+    if (isAnalyzing) {
+      return (
+        <div className="bg-blue-900/30 border border-blue-700 rounded-lg p-4">
+          <div className="flex items-center gap-2">
+            <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-blue-400"></div>
+            <span className="text-blue-300 text-sm font-medium">🤖 AI analyzing alert...</span>
+          </div>
+        </div>
+      )
+    }
+    
+    if (!analysis) {
+      return (
+        <div className="bg-gray-800/50 border border-gray-600 rounded-lg p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-yellow-400 text-sm">🤖 AI Security Analysis</span>
+              {aiStats && aiStats.status === 'disabled' && (
+                <span className="text-xs text-red-400">(API key needed)</span>
+              )}
+            </div>
+            <button
+              onClick={() => handleAnalyzeAlert(alertId)}
+              className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm font-semibold transition"
+              title="Analyze this alert with AI for expert recommendations"
+            >
+              🔍 Analyze with AI
+            </button>
+          </div>
+        </div>
+      )
+    }
+    
+    return (
+      <div className="bg-green-900/20 border border-green-700 rounded-lg p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <span className="text-green-300 text-sm font-bold">🤖 AI Security Analysis</span>
+          <span className="text-xs text-gray-400">
+            ({new Date(analysis.analysis_timestamp).toLocaleString()})
+          </span>
+          <button
+            onClick={() => handleAnalyzeAlert(alertId)}
+            className="ml-auto px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-semibold transition"
+            title="Re-analyze with AI"
+          >
+            ↻
+          </button>
+        </div>
+        <div className="prose prose-sm prose-invert max-w-none">
+          <div 
+            className="text-sm text-gray-200 whitespace-pre-wrap"
+            dangerouslySetInnerHTML={{ 
+              __html: analysis.recommendations
+                .replace(/## (.+)/g, '<h3 class="text-yellow-300 font-bold mt-4 mb-2">$1</h3>')
+                .replace(/\*\*(.+?)\*\*/g, '<strong class="text-white">$1</strong>')
+                .replace(/\*(.+?)\*/g, '<em class="text-blue-300">$1</em>')
+                .replace(/`(.+?)`/g, '<code class="bg-gray-800 px-1 py-0.5 rounded text-green-300 font-mono text-xs">$1</code>')
+                .replace(/\n/g, '<br/>')
+            }}
+          />
+        </div>
+      </div>
+    )
+  }
 
   const getSeverityColor = (severity) => {
     switch (severity?.toLowerCase()) {
@@ -58,9 +231,21 @@ export function AlertsPage() {
 
   return (
     <div className="space-y-6">
+      {/* Test AI Component */}
+      <TestAIButton />
+      
       {/* Header */}
-      <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold">🔔 Security Alerts</h1>
+      <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-4">
+        <div>
+          <h1 className="text-3xl font-bold">🔔 Security Alerts</h1>
+          <p className="text-gray-400 mt-1">Real-time detection engine alerts with AI-powered analysis</p>
+          {aiStats && (
+            <div className="mt-2 text-sm text-gray-500">
+              🤖 AI Agent: {aiStats.status === 'active' ? '✓ Active' : aiStats.status === 'disabled' ? '⚠ Disabled' : '❌ Error'} 
+              {aiStats.total_analyses > 0 && ` | ${aiStats.total_analyses} analyses performed`}
+            </div>
+          )}
+        </div>
         <div className="flex gap-3">
           <select
             value={hours}
@@ -187,6 +372,9 @@ export function AlertsPage() {
               {/* Expanded Details */}
               {expandedId === alert._id && (
                 <div className="border-t border-gray-700 bg-gray-900 p-4 space-y-4">
+                  {/* AI Analysis Section */}
+                  {renderAIRecommendations(alert._id)}
+                  
                   <div>
                     <h4 className="text-sm font-bold text-gray-300 mb-2 uppercase">Full Log Details</h4>
                     <div className="bg-gray-800 rounded p-3 font-mono text-xs text-gray-300 overflow-x-auto max-h-64 overflow-y-auto">

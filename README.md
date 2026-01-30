@@ -1,14 +1,26 @@
-# Mini SIEM - Security Information & Event Management Platform
+# Mini SIEM - AI-Powered Security Information & Event Management Platform
 
 An **enterprise-grade SIEM platform** built with Go, Python, OpenSearch, and React for real-time security event processing, threat detection, and advanced threat hunting.
 
-**Now with Advanced Search** - Query your logs like you would in Splunk or ElasticSearch! 🔍
+**Now with AI Security Agent** - Get instant incident response recommendations using Groq's Llama 3.3 70B model! 🤖
+
+**Advanced Search** - Query your logs like you would in Splunk or ElasticSearch! 🔍
 
 ## Quick Start
 
 ### Prerequisites
 - Docker & Docker Compose
+- **Groq API Key** (free at https://console.groq.com/keys)
 - Port 514 (UDP), 3000, 5601, 8000, 9200 available
+
+### Setup Environment
+```bash
+# Copy environment template
+cp .env.example .env
+
+# Add your Groq API key to .env file
+# GROQ_API_KEY=your_api_key_here
+```
 
 ### Start All Services
 
@@ -21,11 +33,28 @@ python scripts/init-db.py
 
 ### Access the Dashboard
 - **Web UI**: http://localhost:3000
+- **🤖 AI-Powered Alerts**: Click any alert to get AI recommendations
 - **Advanced Search** (NEW): Click 🔍 in navigation
 - **OpenSearch Dashboards**: http://localhost:5601
 - **API Health**: http://localhost:8000/health
 
-## 🚀 What's New: Advanced Search
+## 🚀 What's New: AI Security Agent
+
+**Powered by Groq's Llama 3.3 70B:**
+- **Threat Assessment**: Automatic severity analysis and impact assessment
+- **Root Cause Analysis**: Expert explanation of attack vectors
+- **Immediate Actions**: Specific containment and remediation steps
+- **Investigation Steps**: Additional queries and data sources to check
+- **Prevention Measures**: Long-term security improvements
+
+**Features:**
+- Real-time analysis of high/critical alerts
+- One-click AI analysis from alert interface
+- MITRE ATT&CK framework context
+- Actionable security recommendations
+- Background processing for new alerts
+
+## 🔍 Advanced Search
 
 **Professional search interface with:**
 - Query syntax: `severity:high AND event_type:login_failure`

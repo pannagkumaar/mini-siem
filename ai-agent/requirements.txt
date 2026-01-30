@@ -1,0 +1,4 @@
+aiohttp==3.9.1
+opensearch-py==2.4.2
+asyncio
+python-dotenv==1.0.0
