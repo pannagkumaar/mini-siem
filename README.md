@@ -55,6 +55,7 @@ python scripts/init-db.py
 - Background processing for new alerts
 
 ## 🔍 Advanced Search
+## What's New: Advanced Search
 
 **Professional search interface with:**
 - Query syntax: `severity:high AND event_type:login_failure`
