@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { getIncidents, startInvestigation, resolveIncident, updateIncidentStatus } from './api'
+import { getIncidents, startInvestigation, resolveIncident, updateIncidentStatus } from '../api'
 
 export function IncidentsPage() {
   const [incidents, setIncidents] = useState([])

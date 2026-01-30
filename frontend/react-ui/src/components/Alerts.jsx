@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { getAlerts } from './api'
+import { getAlerts } from '../api'
 
 // API functions for AI analysis
 const analyzeAlertAI = async (alertId) => {

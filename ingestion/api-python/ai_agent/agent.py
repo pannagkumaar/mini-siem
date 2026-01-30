@@ -349,6 +349,139 @@ Please analyze this security alert and provide your expert assessment with speci
                 'error': str(e)
             }
 
+    async def convert_natural_language_query(self, nl_query: str) -> Dict[str, Any]:
+        """
+        Convert natural language query to SIEM query syntax.
+        
+        Args:
+            nl_query: Natural language query from user
+            
+        Returns:
+            Dict with query string and explanation
+        """
+        if not self.groq_api_key:
+            return {
+                "success": False,
+                "error": "AI agent is not available (Groq API key not configured)",
+                "query": nl_query
+            }
+        
+        schema_info = """
+Available fields and their values:
+- severity: low, medium, high, critical
+- event_type: login_success, login_failure, process_create, file_access, privilege_escalation, network_connection, etc.
+- source: windows, linux, firewall, app, network, custom
+- host: hostname or server name (supports wildcards with *)
+- user: username (supports wildcards with *)
+- ip: IP address (supports wildcards like 192.168.*)
+- timestamp: use relative times like >1h (1 hour ago), >24h (24 hours ago), <30m (within 30 minutes)
+- raw.process_name: process executable name
+- raw.commandline: command line arguments
+- raw.file_name: file names
+- raw.domain: domain names
+
+Query syntax operators:
+- AND: combine multiple conditions (all must match)
+- OR: either condition matches
+- NOT: exclude results
+- Parentheses: group conditions like (user:admin OR user:root)
+- Wildcards: * for any characters (e.g., host:prod-*) - USE ONLY ON TEXT/KEYWORD FIELDS, NOT IP FIELDS
+- Comparisons: >1h (greater than), <24h (less than) for timestamps
+
+CRITICAL IP FIELD RULES:
+- IP fields (ip, source_ip, destination_ip) MUST use CIDR notation, NEVER wildcards
+- Examples:
+  * ✅ CORRECT: ip:192.168.0.0/16 (for 192.168.*.*)
+  * ✅ CORRECT: ip:10.0.0.0/8 (for 10.*.*.*)
+  * ✅ CORRECT: ip:172.16.0.0/12 (for 172.16-31.*.*)
+  * ❌ WRONG: ip:192.168.* (will cause error)
+  * ❌ WRONG: ip:10.* (will cause error)
+
+Common CIDR ranges:
+- /8: entire Class A (16.7M IPs, e.g., 10.0.0.0/8)
+- /16: entire Class B (65K IPs, e.g., 192.168.0.0/16)
+- /24: single subnet (256 IPs, e.g., 192.168.1.0/24)
+- /32: single IP (e.g., 192.168.1.1/32)
+
+Examples:
+- "show me failed logins" → severity:high AND event_type:login_failure
+- "admin activity on production servers in the last hour" → (user:admin OR user:root) AND host:prod-* AND timestamp:>1h
+- "powershell commands with high severity" → raw.commandline:*powershell* AND severity:high
+- "network connections from 192.168 network" → event_type:network_connection AND ip:192.168.0.0/16
+- "traffic from 10.x.x.x IPs" → ip:10.0.0.0/8
+"""
+        
+        prompt = f"""Convert the following natural language query into proper SIEM query syntax.
+
+{schema_info}
+
+User query: "{nl_query}"
+
+Respond with a JSON object containing:
+1. "query": The converted query string using the syntax above
+2. "explanation": Brief explanation of what the query will search for
+3. "fields_used": List of fields used in the query
+
+Example response format:
+{{
+  "query": "severity:high AND event_type:login_failure AND timestamp:>1h",
+  "explanation": "Search for high severity failed login attempts in the last hour",
+  "fields_used": ["severity", "event_type", "timestamp"]
+}}
+
+Only respond with valid JSON, no additional text."""
+
+        try:
+            response_text = await self._call_groq_api(prompt)
+            
+            if not response_text:
+                return {
+                    "success": False,
+                    "error": "AI service unavailable",
+                    "query": nl_query
+                }
+            
+            # Parse JSON response
+            result = json.loads(response_text)
+            
+            return {
+                "success": True,
+                "query": result.get("query", nl_query),
+                "explanation": result.get("explanation", ""),
+                "fields_used": result.get("fields_used", []),
+                "original_query": nl_query
+            }
+            
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse AI response as JSON: {e}")
+            # Try to extract query from text response
+            if "query" in response_text.lower():
+                lines = response_text.split('\n')
+                for line in lines:
+                    if 'query' in line.lower() and ':' in line:
+                        query = line.split(':', 1)[1].strip().strip('"\'')
+                        return {
+                            "success": True,
+                            "query": query,
+                            "explanation": "AI-generated query",
+                            "fields_used": [],
+                            "original_query": nl_query
+                        }
+            
+            return {
+                "success": False,
+                "error": f"Failed to parse AI response: {str(e)}",
+                "query": nl_query
+            }
+            
+        except Exception as e:
+            logger.error(f"Error converting query: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "query": nl_query
+            }
+
 
 async def main():
     """Main function for running the AI agent as a standalone service."""

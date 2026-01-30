@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { getRules } from './api'
+import { getRules } from '../api'
 
 const API_BASE = 'http://localhost:8000'
 

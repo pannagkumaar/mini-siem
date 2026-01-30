@@ -110,7 +110,7 @@ def extract_ip_from_string(text: str) -> Optional[str]:
 
 def normalize_windows_event(raw_log: Dict[str, Any]) -> Dict[str, Any]:
     """Normalize Windows Event Log."""
-    timestamp = normalize_timestamp(raw_log.get("TimeCreated"))
+    timestamp = normalize_timestamp(raw_log.get("timestamp") or raw_log.get("TimeCreated"))
     
     # Determine event type from EventID
     event_id = raw_log.get("EventID", 0)
@@ -122,16 +122,16 @@ def normalize_windows_event(raw_log: Dict[str, Any]) -> Dict[str, Any]:
         4672: EventType.PRIVILEGE_ESCALATION.value,
         4656: EventType.FILE_ACCESS.value,
     }
-    event_type = event_type_map.get(event_id, EventType.INFO.value)
+    event_type = event_type_map.get(event_id, raw_log.get("event_type", EventType.INFO.value))
     
     return {
         "timestamp": timestamp,
-        "source": LogSource.WINDOWS.value,
-        "host": raw_log.get("ComputerName", "unknown"),
-        "user": raw_log.get("TargetUserName", raw_log.get("SubjectUserName", "unknown")),
-        "ip": extract_ip_from_string(str(raw_log.get("IpAddress", ""))) or "0.0.0.0",
+        "source": raw_log.get("source", LogSource.WINDOWS.value),
+        "host": raw_log.get("host") or raw_log.get("ComputerName", "unknown"),
+        "user": raw_log.get("user") or raw_log.get("TargetUserName", raw_log.get("SubjectUserName", "unknown")),
+        "ip": raw_log.get("ip") or extract_ip_from_string(str(raw_log.get("IpAddress", ""))) or "0.0.0.0",
         "event_type": event_type,
-        "severity": Severity.MEDIUM.value,
+        "severity": raw_log.get("severity", Severity.MEDIUM.value),
         "raw": raw_log,
     }
 
@@ -142,22 +142,23 @@ def normalize_linux_syslog(raw_log: Dict[str, Any]) -> Dict[str, Any]:
     message = raw_log.get("message", "")
     
     # Determine event type from message patterns
-    event_type = EventType.SYSLOG_EVENT.value
-    if "sudo" in message.lower():
-        event_type = EventType.PRIVILEGE_ESCALATION.value
-    elif "Failed password" in message or "authentication failure" in message.lower():
-        event_type = EventType.LOGIN_FAILURE.value
-    elif "Accepted" in message or "session opened" in message.lower():
-        event_type = EventType.LOGIN_SUCCESS.value
+    event_type = raw_log.get("event_type", EventType.SYSLOG_EVENT.value)
+    if event_type == EventType.SYSLOG_EVENT.value:  # Only override if not already set
+        if "sudo" in message.lower():
+            event_type = EventType.PRIVILEGE_ESCALATION.value
+        elif "Failed password" in message or "authentication failure" in message.lower():
+            event_type = EventType.LOGIN_FAILURE.value
+        elif "Accepted" in message or "session opened" in message.lower():
+            event_type = EventType.LOGIN_SUCCESS.value
     
     return {
         "timestamp": timestamp,
-        "source": LogSource.LINUX.value,
-        "host": raw_log.get("hostname", "unknown"),
+        "source": raw_log.get("source", LogSource.LINUX.value),
+        "host": raw_log.get("host") or raw_log.get("hostname", "unknown"),
         "user": raw_log.get("user", "unknown"),
-        "ip": extract_ip_from_string(message) or "0.0.0.0",
+        "ip": raw_log.get("ip") or extract_ip_from_string(message) or "0.0.0.0",
         "event_type": event_type,
-        "severity": Severity.MEDIUM.value,
+        "severity": raw_log.get("severity", Severity.MEDIUM.value),
         "raw": raw_log,
     }
 
@@ -167,15 +168,15 @@ def normalize_firewall_log(raw_log: Dict[str, Any]) -> Dict[str, Any]:
     timestamp = normalize_timestamp(raw_log.get("timestamp"))
     action = raw_log.get("action", "").lower()
     
-    event_type = EventType.FIREWALL_ALLOW.value if action == "allow" else EventType.FIREWALL_DENY.value
-    severity = Severity.HIGH.value if action == "deny" else Severity.LOW.value
+    event_type = raw_log.get("event_type", EventType.FIREWALL_ALLOW.value if action == "allow" else EventType.FIREWALL_DENY.value)
+    severity = raw_log.get("severity", Severity.HIGH.value if action == "deny" else Severity.LOW.value)
     
     return {
         "timestamp": timestamp,
-        "source": LogSource.FIREWALL.value,
-        "host": raw_log.get("source_device", "unknown"),
-        "user": "firewall",
-        "ip": raw_log.get("source_ip", "0.0.0.0"),
+        "source": raw_log.get("source", LogSource.FIREWALL.value),
+        "host": raw_log.get("host") or raw_log.get("source_device", "unknown"),
+        "user": raw_log.get("user", "firewall"),
+        "ip": raw_log.get("ip") or raw_log.get("source_ip", "0.0.0.0"),
         "event_type": event_type,
         "severity": severity,
         "raw": raw_log,
@@ -196,6 +197,14 @@ def normalize_log(raw_log: Dict[str, Any], source_hint: Optional[str] = None) ->
     if not isinstance(raw_log, dict):
         raw_log = {"message": str(raw_log)}
 
+    # Check if log already has a valid source field - preserve it
+    existing_source = raw_log.get("source", "").lower()
+    if existing_source in [s.value for s in LogSource]:
+        # Use existing source hint from the log
+        source_hint = existing_source
+    elif source_hint:
+        source_hint = source_hint.lower()
+    
     # Determine the source
     if source_hint:
         source_hint = source_hint.lower()
@@ -205,6 +214,8 @@ def normalize_log(raw_log: Dict[str, Any], source_hint: Optional[str] = None) ->
             return normalize_linux_syslog(raw_log)
         elif "firewall" in source_hint:
             return normalize_firewall_log(raw_log)
+        elif "network" in source_hint:
+            return normalize_firewall_log(raw_log)  # Network logs treated like firewall logs
 
     # Auto-detect based on fields present
     if "EventID" in raw_log or "ComputerName" in raw_log:

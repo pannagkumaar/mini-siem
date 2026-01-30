@@ -155,6 +155,11 @@ class QueryParser:
         # Map field name
         es_field = self.FIELD_MAPPING.get(field, field)
         
+        # Special handling for severity when searching across logs and alerts
+        # Logs use 'severity', alerts use 'rule_severity'
+        if field == 'severity':
+            return self._handle_severity_condition(value)
+        
         # Handle wildcards and ranges
         if value.startswith('>'):
             # Numeric/datetime range
@@ -213,6 +218,34 @@ class QueryParser:
                             es_field: value
                         }
                     }
+    
+    def _handle_severity_condition(self, value: str) -> Dict[str, Any]:
+        """
+        Handle severity field specially to search both 'severity' (logs) and 'rule_severity' (alerts).
+        Returns a bool query that matches either field.
+        """
+        # Create a query that matches either severity or rule_severity
+        return {
+            "bool": {
+                "should": [
+                    {
+                        "match": {
+                            "severity": {
+                                "query": value.lower()
+                            }
+                        }
+                    },
+                    {
+                        "match": {
+                            "rule_severity": {
+                                "query": value.lower()
+                            }
+                        }
+                    }
+                ],
+                "minimum_should_match": 1
+            }
+        }
     
     def _handle_range_condition(self, field: str, value: str) -> Dict[str, Any]:
         """Handle range conditions like >100 or <2024-01-01"""

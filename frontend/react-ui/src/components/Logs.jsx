@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { getLogs } from './api'
+import { getLogs } from '../api'
 
 export function LogsPage() {
   const [logs, setLogs] = useState([])

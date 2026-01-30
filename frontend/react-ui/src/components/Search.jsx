@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { searchLogs, getSearchSuggestions, saveSearch, getSavedSearches } from './api'
+import { searchLogs, getSearchSuggestions, saveSearch, getSavedSearches } from '../api'
 
 export function SearchPage() {
   const [query, setQuery] = useState('')
@@ -14,6 +14,12 @@ export function SearchPage() {
   const [showSaveModal, setShowSaveModal] = useState(false)
   const [searchName, setSearchName] = useState('')
   const [searchDescription, setSearchDescription] = useState('')
+  
+  // AI Query Builder
+  const [nlQuery, setNlQuery] = useState('')
+  const [aiConverting, setAiConverting] = useState(false)
+  const [showAiBuilder, setShowAiBuilder] = useState(false)
+  const [aiExplanation, setAiExplanation] = useState('')
   
   // Pagination
   const [offset, setOffset] = useState(0)
@@ -106,6 +112,47 @@ export function SearchPage() {
     setShowSuggestions(false)
   }
 
+  const convertNaturalLanguageQuery = async () => {
+    if (!nlQuery.trim()) {
+      setError('Please enter a natural language query')
+      return
+    }
+
+    try {
+      setAiConverting(true)
+      setError(null)
+      setAiExplanation('')
+
+      const response = await fetch('http://localhost:8000/ai/convert-query', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ query: nlQuery }),
+      })
+
+      if (!response.ok) {
+        throw new Error(`AI conversion failed: ${response.statusText}`)
+      }
+
+      const data = await response.json()
+
+      if (data.success) {
+        setQuery(data.query)
+        setAiExplanation(data.explanation)
+        setShowAiBuilder(false)
+        setNlQuery('')
+      } else {
+        setError(data.error || 'Failed to convert query')
+      }
+    } catch (err) {
+      setError(err.message || 'AI query conversion failed')
+      console.error('Error converting query:', err)
+    } finally {
+      setAiConverting(false)
+    }
+  }
+
   const handleSaveSearch = async () => {
     if (!searchName.trim()) {
       setError('Please enter a search name')
@@ -167,36 +214,104 @@ export function SearchPage() {
 
       {/* Search Bar Section */}
       <div className="bg-[#0f1629] border border-[#1a2332] rounded p-4 space-y-4">
-        <div>
-          <label className="block text-xs font-medium text-gray-400 mb-2 uppercase tracking-wide">
+        {/* AI Query Builder Toggle */}
+        <div className="flex items-center justify-between mb-2">
+          <label className="block text-xs font-medium text-gray-400 uppercase tracking-wide">
             Query
           </label>
-          <div className="relative">
-            <input
-              type="text"
-              value={query}
-              onChange={handleQueryChange}
-              onKeyPress={(e) => e.key === 'Enter' && performSearch()}
-              placeholder="e.g., severity:high AND event_type:login_failure"
-              className="w-full px-3 py-2 bg-[#0a0e27] border border-[#1a2332] rounded text-gray-100 placeholder-gray-600 focus:outline-none focus:border-blue-500 font-mono text-sm"
-            />
-            
-            {/* Auto-complete suggestions */}
-            {showSuggestions && filteredSuggestions.length > 0 && (
-              <div className="absolute top-full left-0 right-0 mt-2 bg-[#0a0e27] border border-[#1a2332] rounded shadow-xl z-10">
-                {filteredSuggestions.slice(0, 5).map((suggestion, idx) => (
-                  <div
-                    key={idx}
-                    onClick={() => applySuggestion(suggestion)}
-                    className="px-3 py-2 hover:bg-[#151b2e] cursor-pointer text-sm text-gray-300 border-b border-[#1a2332] last:border-0"
-                  >
-                    {Array.isArray(suggestion) ? suggestion[0] : suggestion}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          <button
+            onClick={() => setShowAiBuilder(!showAiBuilder)}
+            className="flex items-center gap-2 px-3 py-1 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white rounded text-xs font-semibold transition"
+          >
+            <span>🤖</span>
+            {showAiBuilder ? 'Manual Query' : 'AI Query Builder'}
+          </button>
         </div>
+
+        {/* AI Natural Language Query */}
+        {showAiBuilder ? (
+          <div className="space-y-3 bg-gradient-to-r from-purple-900/20 to-blue-900/20 border border-purple-700/50 rounded p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-purple-300 text-sm font-bold">🤖 AI Query Builder</span>
+              <span className="text-xs text-gray-400">Describe what you want to find in plain English</span>
+            </div>
+            
+            <div className="space-y-2">
+              <textarea
+                value={nlQuery}
+                onChange={(e) => setNlQuery(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && convertNaturalLanguageQuery()}
+                placeholder="e.g., show me all failed login attempts from admin users in the last hour on production servers"
+                className="w-full px-3 py-2 bg-[#0a0e27] border border-[#1a2332] rounded text-gray-100 placeholder-gray-600 focus:outline-none focus:border-purple-500 text-sm resize-none"
+                rows="3"
+              />
+              
+              <div className="flex gap-2">
+                <button
+                  onClick={convertNaturalLanguageQuery}
+                  disabled={aiConverting || !nlQuery.trim()}
+                  className="flex-1 px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white rounded text-sm font-semibold transition flex items-center justify-center gap-2"
+                >
+                  {aiConverting ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white"></div>
+                      <span>Converting...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>✨</span>
+                      <span>Convert to Query</span>
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {aiExplanation && (
+                <div className="bg-green-900/20 border border-green-700/50 rounded p-3 text-xs text-green-200">
+                  <span className="font-semibold">Query explanation:</span> {aiExplanation}
+                </div>
+              )}
+
+              <div className="text-xs text-gray-500 space-y-1">
+                <div className="font-semibold text-gray-400">Examples:</div>
+                <div className="pl-2 space-y-0.5">
+                  <div>• "show me failed logins"</div>
+                  <div>• "admin activity on production servers in the last hour"</div>
+                  <div>• "powershell commands with high severity"</div>
+                  <div>• "network connections from suspicious IPs"</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div>
+            <div className="relative">
+              <input
+                type="text"
+                value={query}
+                onChange={handleQueryChange}
+                onKeyPress={(e) => e.key === 'Enter' && performSearch()}
+                placeholder="e.g., severity:high AND event_type:login_failure"
+                className="w-full px-3 py-2 bg-[#0a0e27] border border-[#1a2332] rounded text-gray-100 placeholder-gray-600 focus:outline-none focus:border-blue-500 font-mono text-sm"
+              />
+              
+              {/* Auto-complete suggestions */}
+              {showSuggestions && filteredSuggestions.length > 0 && (
+                <div className="absolute top-full left-0 right-0 mt-2 bg-[#0a0e27] border border-[#1a2332] rounded shadow-xl z-10">
+                  {filteredSuggestions.slice(0, 5).map((suggestion, idx) => (
+                    <div
+                      key={idx}
+                      onClick={() => applySuggestion(suggestion)}
+                      className="px-3 py-2 hover:bg-[#151b2e] cursor-pointer text-sm text-gray-300 border-b border-[#1a2332] last:border-0"
+                    >
+                      {Array.isArray(suggestion) ? suggestion[0] : suggestion}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Options */}
         <div className="grid grid-cols-3 gap-3">

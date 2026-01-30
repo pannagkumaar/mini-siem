@@ -692,7 +692,8 @@ def advanced_search(
     limit: int = 100,
     offset: int = 0,
     sort_by: str = "timestamp",
-    sort_order: str = "desc"
+    sort_order: str = "desc",
+    index: str = "logs,alerts"  # Search both logs and alerts by default
 ):
     """
     Advanced search with SIEM query syntax.
@@ -703,8 +704,11 @@ def advanced_search(
       - host:prod-* AND (user:admin OR user:root)
       - timestamp:1h ago
       - source_ip:192.168.* AND destination_port:443
+    
+    Parameters:
+      - index: Comma-separated list of indices to search (default: "logs,alerts")
     """
-    logger.info(f"SEARCH ENDPOINT CALLED - Query: {q}")
+    logger.info(f"SEARCH ENDPOINT CALLED - Query: {q}, Index: {index}")
     
     if not opensearch_client:
         raise HTTPException(status_code=503, detail="OpenSearch not available")
@@ -767,8 +771,8 @@ def advanced_search(
         logger.info(f"Advanced search - Query: {q}")
         logger.info(f"Generated DSL: {json.dumps(query_dsl, indent=2)}")
         
-        # Execute search
-        response = opensearch_client.search(index="logs", body=query_dsl)
+        # Execute search across specified indices
+        response = opensearch_client.search(index=index, body=query_dsl)
         
         results = []
         for hit in response["hits"]["hits"]:
@@ -1049,6 +1053,56 @@ async def get_ai_stats():
                 "status": "error"
             }
         }
+
+
+@app.post("/ai/convert-query")
+async def convert_nl_query(request: Request):
+    """
+    Convert natural language query to SIEM query syntax using AI.
+    
+    Request body:
+    {
+        "query": "show me failed logins from admin users in the last hour"
+    }
+    
+    Response:
+    {
+        "success": true,
+        "query": "event_type:login_failure AND user:admin AND timestamp:>1h",
+        "explanation": "Search for failed login attempts by admin users in the last hour",
+        "fields_used": ["event_type", "user", "timestamp"],
+        "original_query": "show me failed logins from admin users in the last hour"
+    }
+    """
+    if not ai_agent:
+        raise HTTPException(
+            status_code=503,
+            detail="AI agent not available. Please configure Groq API key."
+        )
+    
+    try:
+        data = await request.json()
+        nl_query = data.get("query", "")
+        
+        if not nl_query:
+            raise HTTPException(status_code=400, detail="Query parameter is required")
+        
+        logger.info(f"🤖 Converting natural language query: {nl_query}")
+        
+        result = await ai_agent.convert_natural_language_query(nl_query)
+        
+        if result.get("success"):
+            logger.info(f"✓ Query converted: {result['query']}")
+        else:
+            logger.warning(f"⚠ Query conversion failed: {result.get('error')}")
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error converting query: {e}")
+        raise HTTPException(status_code=500, detail=f"Query conversion failed: {str(e)}")
 
 
 if __name__ == "__main__":

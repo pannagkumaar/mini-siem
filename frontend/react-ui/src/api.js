@@ -57,3 +57,50 @@ export const ingestLog = async (log) => {
 export const ingestLogs = async (logs) => {
   return apiClient.post('/ingest', logs)
 }
+
+// Start incident investigation
+export const startInvestigation = async (incidentId) => {
+  return apiClient.post(`/incidents/${incidentId}/investigate`)
+}
+
+// Resolve incident
+export const resolveIncident = async (incidentId, notes = '') => {
+  return apiClient.post(`/incidents/${incidentId}/resolve`, { notes })
+}
+
+// Update incident status
+export const updateIncidentStatus = async (incidentId, status, notes = '') => {
+  return apiClient.post(`/incidents/${incidentId}/status`, { status, notes })
+}
+
+// Search logs with advanced query
+export const searchLogs = async (query, hours = 24, limit = 100, offset = 0) => {
+  const params = new URLSearchParams({
+    q: query,
+    hours: hours.toString(),
+    limit: limit.toString(),
+    offset: offset.toString()
+  })
+  return apiClient.get(`/search?${params.toString()}`)
+}
+
+// Get search suggestions
+export const getSearchSuggestions = async (partial = '') => {
+  if (!partial) return { fields: [], values: {} }
+  return apiClient.get(`/search/suggestions?q=${encodeURIComponent(partial)}`)
+}
+
+// Save a search query
+export const saveSearch = async (name, query, description = '') => {
+  return apiClient.post('/search/save', { name, query, description })
+}
+
+// Get saved searches
+export const getSavedSearches = async () => {
+  return apiClient.get('/search/saved')
+}
+
+// Convert natural language to SIEM query
+export const convertNaturalLanguageQuery = async (naturalQuery) => {
+  return apiClient.post('/ai/convert-query', { natural_query: naturalQuery })
+}

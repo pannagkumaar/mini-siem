@@ -278,9 +278,20 @@ def generate_log():
             "target": random.choice(["SAM", "NTDS.dit", "LSA secrets"]),
         })
     
+    # Assign appropriate source based on host type and event
+    if "windows" in template["event_type"] or "registry" in template["event_type"] or host.startswith("workstation") or "powershell" in str(raw_data):
+        source = "windows"
+    elif host.startswith("firewall"):
+        source = "firewall"
+    elif "network" in template["event_type"]:
+        source = "network"
+    else:
+        # Default to windows for most security events
+        source = "windows"
+    
     log = {
         "timestamp": timestamp,
-        "source": "continuous-generator",
+        "source": source,
         "host": host,
         "user": user,
         "ip": ip,
