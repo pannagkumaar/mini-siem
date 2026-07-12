@@ -1,5 +1,10 @@
 import React, { useState, useEffect } from 'react'
-import { getIncidents, startInvestigation, resolveIncident, updateIncidentStatus } from '../api'
+import {
+  getIncidents, startInvestigation, resolveIncident, updateIncidentStatus,
+  generateIncidentRCA, getIncidentRCA,
+} from '../api'
+
+const MITRE_TACTIC_URL = (id) => `https://attack.mitre.org/techniques/${id.replace('.', '/')}/`
 
 export function IncidentsPage() {
   const [incidents, setIncidents] = useState([])
@@ -13,6 +18,8 @@ export function IncidentsPage() {
   const [statusNotes, setStatusNotes] = useState('')
   const [successMessage, setSuccessMessage] = useState(null)
   const [resolveMode, setResolveMode] = useState(null)
+  const [rcaByIncident, setRcaByIncident] = useState({})
+  const [rcaLoading, setRcaLoading] = useState(new Set())
 
   useEffect(() => {
     const fetchIncidents = async () => {
@@ -134,6 +141,121 @@ export function IncidentsPage() {
     }
   }
 
+  const handleExpand = async (idx, incident) => {
+    const nextExpanded = expandedId === idx ? null : idx
+    setExpandedId(nextExpanded)
+
+    const incidentId = incident.incident_id || incident._id
+    if (nextExpanded !== null && incidentId && !(incidentId in rcaByIncident)) {
+      try {
+        const response = await getIncidentRCA(incidentId)
+        if (response.data.rca) {
+          setRcaByIncident(prev => ({ ...prev, [incidentId]: response.data.rca }))
+        }
+      } catch (err) {
+        // No RCA yet - that's fine, user can generate one
+      }
+    }
+  }
+
+  const handleGenerateRCA = async (incidentId, force = false) => {
+    setRcaLoading(prev => new Set(prev).add(incidentId))
+    try {
+      const response = await generateIncidentRCA(incidentId, force)
+      if (response.data.rca) {
+        setRcaByIncident(prev => ({ ...prev, [incidentId]: response.data.rca }))
+      }
+    } catch (err) {
+      setError(err.message || 'Failed to generate AI RCA')
+      setTimeout(() => setError(null), 4000)
+    } finally {
+      setRcaLoading(prev => {
+        const next = new Set(prev)
+        next.delete(incidentId)
+        return next
+      })
+    }
+  }
+
+  const renderRCA = (incidentId) => {
+    const rca = rcaByIncident[incidentId]
+    const isLoading = rcaLoading.has(incidentId)
+
+    if (isLoading) {
+      return (
+        <div className="bg-blue-900/30 border border-blue-700 rounded-lg p-4">
+          <div className="flex items-center gap-2">
+            <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-blue-400"></div>
+            <span className="text-blue-300 text-sm font-medium">Generating AI root cause analysis...</span>
+          </div>
+        </div>
+      )
+    }
+
+    if (!rca) {
+      return (
+        <div className="bg-gray-800/50 border border-gray-600 rounded-lg p-4 flex items-center justify-between">
+          <span className="text-yellow-400 text-sm font-medium">AI Root Cause Analysis</span>
+          <button
+            onClick={() => handleGenerateRCA(incidentId)}
+            className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm font-semibold transition"
+          >
+            Generate AI RCA
+          </button>
+        </div>
+      )
+    }
+
+    const listSection = (title, items) => (
+      items && items.length > 0 && (
+        <div className="mb-3">
+          <h5 className="text-xs font-semibold text-blue-300 uppercase tracking-wide mb-1">{title}</h5>
+          <ul className="list-disc list-inside space-y-0.5">
+            {items.map((item, i) => (
+              <li key={i} className="text-sm text-gray-300">
+                {typeof item === 'object' ? `${item.id || ''} ${item.name || ''}`.trim() : item}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )
+    )
+
+    return (
+      <div className="bg-green-900/20 border border-green-700 rounded-lg p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <span className="text-green-300 text-sm font-bold">AI Root Cause Analysis</span>
+          <span className="text-xs px-2 py-0.5 rounded bg-[#0f1629] border border-[#1a2332] text-gray-400">
+            {rca.mode === 'llm' ? 'LLM mode' : 'template mode'}
+          </span>
+          <button
+            onClick={() => handleGenerateRCA(incidentId, true)}
+            className="ml-auto px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-semibold transition"
+            title="Regenerate"
+          >
+            Regenerate
+          </button>
+        </div>
+
+        <div className="mb-3">
+          <h5 className="text-xs font-semibold text-blue-300 uppercase tracking-wide mb-1">Threat Summary</h5>
+          <p className="text-sm text-gray-200">{rca.threat_summary}</p>
+        </div>
+        <div className="mb-3">
+          <h5 className="text-xs font-semibold text-blue-300 uppercase tracking-wide mb-1">Root Cause</h5>
+          <p className="text-sm text-gray-200">{rca.root_cause_analysis}</p>
+        </div>
+        {listSection('Evidence', rca.evidence)}
+        {listSection('MITRE ATT&CK Mapping', rca.mitre_attack_mapping)}
+        {listSection('Immediate Containment', rca.immediate_containment)}
+        {listSection('Investigation Steps', rca.investigation_steps)}
+        {listSection('Remediation', rca.remediation)}
+        {listSection('False Positive Considerations', rca.false_positive_considerations)}
+        {listSection('Prevention Measures', rca.prevention_measures)}
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -230,7 +352,7 @@ export function IncidentsPage() {
                     <p className="text-sm text-gray-400">{incident.description}</p>
                   </div>
                   <button
-                    onClick={() => setExpandedId(expandedId === idx ? null : idx)}
+                    onClick={() => handleExpand(idx, incident)}
                     className="ml-4"
                   >
                     <svg 
@@ -290,6 +412,34 @@ export function IncidentsPage() {
                         </div>
                       </div>
                     </div>
+
+                    {incident.suspected_attack_chain && (
+                      <div>
+                        <h4 className="text-xs font-medium text-gray-500 mb-2 uppercase tracking-wide">Suspected Attack Chain</h4>
+                        <p className="text-sm text-gray-300 font-mono bg-[#0f1629] border border-[#1a2332] rounded p-2">
+                          {incident.suspected_attack_chain}
+                        </p>
+                      </div>
+                    )}
+
+                    {incident.mitre_techniques && incident.mitre_techniques.length > 0 && (
+                      <div>
+                        <h4 className="text-xs font-medium text-gray-500 mb-2 uppercase tracking-wide">MITRE ATT&CK Techniques</h4>
+                        <div className="flex flex-wrap gap-2">
+                          {incident.mitre_techniques.map((tag, i) => (
+                            <a
+                              key={i}
+                              href={MITRE_TACTIC_URL(tag)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-2 py-0.5 bg-purple-900/50 hover:bg-purple-900/70 text-purple-200 border border-purple-800 rounded text-xs font-mono"
+                            >
+                              {tag}
+                            </a>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
                     <div>
                       <h4 className="text-xs font-medium text-gray-500 mb-2 uppercase tracking-wide">Affected Systems</h4>
@@ -360,6 +510,44 @@ export function IncidentsPage() {
                         </div>
                       </div>
                     )}
+
+                    {incident.timeline && incident.timeline.length > 0 && (
+                      <div>
+                        <h4 className="text-xs font-medium text-gray-500 mb-2 uppercase tracking-wide">Timeline</h4>
+                        <div className="space-y-1.5">
+                          {incident.timeline.map((step, stepIdx) => (
+                            <div key={stepIdx} className="flex items-start gap-2 text-xs">
+                              <span className="mt-1 w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0"></span>
+                              <span className="text-gray-600 font-mono shrink-0">
+                                {step.timestamp ? new Date(step.timestamp).toLocaleTimeString() : 'N/A'}
+                              </span>
+                              <span className="text-gray-300">
+                                {step.rule_name || step.rule_id} <span className="text-gray-600">({step.event_type})</span>
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {incident.recommended_actions && incident.recommended_actions.length > 0 && (
+                      <div>
+                        <h4 className="text-xs font-medium text-gray-500 mb-2 uppercase tracking-wide">Recommended Actions</h4>
+                        <div className="space-y-1">
+                          {incident.recommended_actions.map((action, actionIdx) => (
+                            <label key={actionIdx} className="flex items-start gap-2 text-sm text-gray-300">
+                              <input type="checkbox" className="mt-1" />
+                              <span>{action}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div>
+                      <h4 className="text-xs font-medium text-gray-500 mb-2 uppercase tracking-wide">AI Root Cause Analysis</h4>
+                      {renderRCA(incident.incident_id || incident._id)}
+                    </div>
                   </div>
                 </div>
               )}

@@ -1,0 +1,44 @@
+id: RULE-AUTH-003
+name: Administrative Login Anomaly
+description: >
+  Detects a successful login by a privileged account (admin/root/administrator)
+  flagged as unusual - e.g. from a new geographic location, an unrecognized
+  device, or outside normal business hours.
+severity: high
+log_source: any
+type: single
+condition:
+  event_type: login_success
+  user:
+    in:
+      - admin
+      - root
+      - administrator
+      - sysadmin
+  raw.unusual_login: true
+mitre_technique:
+  - id: T1078.001
+    name: Valid Accounts - Default Accounts
+  - id: T1133
+    name: External Remote Services
+false_positives:
+  - Administrator legitimately traveling or working from a new location
+  - New device recently enrolled for the admin account
+remediation:
+  - Verify the login with the account owner through an out-of-band channel
+  - Review actions taken during the session
+  - Require step-up MFA for privileged accounts on new devices/locations
+  - Restrict administrative logins to a known IP allowlist or VPN
+sample_log:
+  timestamp: "2026-07-12T03:14:00Z"
+  source: windows
+  host: dc-01
+  user: admin
+  ip: 198.51.100.23
+  event_type: login_success
+  severity: high
+  raw:
+    EventID: 4624
+    LogonType: 10
+    unusual_login: true
+    reason: "new_geolocation:RO first_seen_ip"

@@ -1,0 +1,42 @@
+id: RULE-EP-001
+name: Suspicious Encoded PowerShell Execution
+description: >
+  Detects PowerShell launched with base64-encoded commands, download
+  cradles, or AMSI/execution-policy bypass flags - a common technique for
+  obfuscating malicious payloads and evading static detection.
+severity: critical
+log_source: windows
+type: single
+condition:
+  event_type: process_create
+  source: windows
+  raw.process_name:
+    contains: powershell
+  raw.commandline:
+    regex: "(?i)(-enc\\b|-encodedcommand|-e\\s+[A-Za-z0-9+/=]{20,}|bypass|downloadstring|invoke-expression|\\biex\\b|-nop\\b|-w\\s+hidden)"
+mitre_technique:
+  - id: T1059.001
+    name: Command and Scripting Interpreter - PowerShell
+  - id: T1027
+    name: Obfuscated Files or Information
+false_positives:
+  - Legitimate administrative or deployment scripts using PowerShell remoting
+  - Software installers that invoke encoded PowerShell as part of setup
+remediation:
+  - Isolate the host and terminate the offending process
+  - Decode and review the command for intent (download, persistence, exfil)
+  - Enable PowerShell Script Block Logging and Constrained Language Mode
+  - Restrict PowerShell execution policy via GPO / AppLocker
+sample_log:
+  timestamp: "2026-07-12T12:00:00Z"
+  source: windows
+  host: workstation-01
+  user: alice.smith
+  ip: 10.0.1.100
+  event_type: process_create
+  severity: critical
+  raw:
+    EventID: 4688
+    process_name: powershell.exe
+    commandline: "powershell.exe -nop -w hidden -EncodedCommand SQBuAHYAbwBrAGUALQBXAGUAYgBSAGUAcQB1AGUAcwB0"
+    parent_process: cmd.exe

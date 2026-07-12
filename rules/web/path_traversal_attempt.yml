@@ -1,0 +1,38 @@
+id: RULE-WEB-002
+name: Path Traversal Attempt
+description: >
+  Detects HTTP requests attempting to escape the web root via directory
+  traversal sequences (../) to read sensitive files such as /etc/passwd or
+  Windows boot configuration.
+severity: high
+log_source: app
+type: single
+condition:
+  event_type: web_request
+  raw.uri:
+    regex: "(\\.\\.%2f|\\.\\./|%2e%2e%2f|etc/passwd|boot\\.ini|win\\.ini)"
+mitre_technique:
+  - id: T1083
+    name: File and Directory Discovery
+  - id: T1190
+    name: Exploit Public-Facing Application
+false_positives:
+  - Legitimate file paths that happen to contain literal ".." segments (rare)
+remediation:
+  - Canonicalize and validate all file paths derived from user input
+  - Run the web server process with least-privilege filesystem access
+  - Deploy a WAF rule blocking traversal sequences
+  - Patch the vulnerable file-serving endpoint
+sample_log:
+  timestamp: "2026-07-12T11:23:45Z"
+  source: app
+  host: web-server-01
+  user: anonymous
+  ip: 198.51.100.77
+  event_type: web_request
+  severity: high
+  raw:
+    method: GET
+    uri: "/download?file=../../../../etc/passwd"
+    status: 403
+    user_agent: "Mozilla/5.0"

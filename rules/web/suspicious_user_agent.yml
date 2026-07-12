@@ -1,0 +1,39 @@
+id: RULE-WEB-003
+name: Suspicious User-Agent (Scanner/Tooling)
+description: >
+  Detects HTTP requests carrying a User-Agent string associated with common
+  offensive security / reconnaissance tooling (sqlmap, nikto, nmap, gobuster,
+  masscan, etc.), often observed during automated vulnerability scanning
+  ahead of an attack.
+severity: medium
+log_source: app
+type: single
+condition:
+  event_type: web_request
+  raw.user_agent:
+    regex: "(?i)(sqlmap|nikto|nmap|masscan|gobuster|dirbuster|acunetix|nessus|wpscan)"
+mitre_technique:
+  - id: T1595
+    name: Active Scanning
+  - id: T1595.002
+    name: Vulnerability Scanning
+false_positives:
+  - Authorized penetration test or internal vulnerability scan
+  - Security team's own scheduled scanning tooling
+remediation:
+  - Confirm whether the scan is authorized; if not, block the source IP
+  - Rate-limit or challenge (CAPTCHA) requests with scanner user agents
+  - Alert the security team to correlate with subsequent exploit attempts
+sample_log:
+  timestamp: "2026-07-12T11:20:05Z"
+  source: app
+  host: web-server-01
+  user: anonymous
+  ip: 198.51.100.77
+  event_type: web_request
+  severity: medium
+  raw:
+    method: GET
+    uri: "/admin/login.php"
+    status: 404
+    user_agent: "sqlmap/1.7.2#stable (http://sqlmap.org)"

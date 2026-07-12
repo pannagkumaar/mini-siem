@@ -41,6 +41,116 @@ if not logger.handlers:
     logger.setLevel(logging.INFO)
 
 
+# Human-readable names for the MITRE ATT&CK technique IDs used across the
+# rule pack, so template-mode RCAs don't have to show bare IDs.
+MITRE_TECHNIQUE_NAMES = {
+    "T1003": "OS Credential Dumping",
+    "T1003.001": "OS Credential Dumping: LSASS Memory",
+    "T1005": "Data from Local System",
+    "T1020": "Automated Exfiltration",
+    "T1021": "Remote Services",
+    "T1027": "Obfuscated Files or Information",
+    "T1036": "Masquerading",
+    "T1041": "Exfiltration Over C2 Channel",
+    "T1059": "Command and Scripting Interpreter",
+    "T1059.001": "Command and Scripting Interpreter: PowerShell",
+    "T1068": "Exploitation for Privilege Escalation",
+    "T1071": "Application Layer Protocol",
+    "T1078": "Valid Accounts",
+    "T1078.001": "Valid Accounts: Default Accounts",
+    "T1083": "File and Directory Discovery",
+    "T1086": "PowerShell (legacy ID)",
+    "T1098": "Account Manipulation",
+    "T1110": "Brute Force",
+    "T1110.001": "Brute Force: Password Guessing",
+    "T1112": "Modify Registry",
+    "T1133": "External Remote Services",
+    "T1134": "Access Token Manipulation",
+    "T1136": "Create Account",
+    "T1187": "Forced Authentication",
+    "T1190": "Exploit Public-Facing Application",
+    "T1204": "User Execution",
+    "T1204.002": "User Execution: Malicious File",
+    "T1224": "Domain Trust Discovery",
+    "T1530": "Data from Cloud Storage",
+    "T1543": "Create or Modify System Process",
+    "T1548": "Abuse Elevation Control Mechanism",
+    "T1562": "Impair Defenses",
+    "T1566": "Phishing",
+    "T1570": "Lateral Tool Transfer",
+    "T1572": "Protocol Tunneling",
+    "T1580": "Cloud Infrastructure Discovery",
+    "T1595": "Active Scanning",
+    "T1595.002": "Active Scanning: Vulnerability Scanning",
+}
+
+# Narrative building blocks keyed by correlation pattern_id / rule_id, used
+# by the deterministic template RCA fallback (no LLM required).
+TEMPLATE_NARRATIVES = {
+    "CORR-001": {
+        "summary": "A brute-force attack against {entity} succeeded, followed by privilege escalation - indicating a full account compromise.",
+        "root_cause": "The attacker repeatedly guessed credentials for {user_or_account} until authentication succeeded, then escalated privileges, gaining elevated access on {host_or_entity}.",
+    },
+    "RULE-AUTH-002": {
+        "summary": "A successful login on {entity} occurred immediately after a burst of failed login attempts, suggesting the brute-force attack against this account succeeded.",
+        "root_cause": "Weak or guessable credentials allowed an attacker to authenticate after repeated attempts. No account lockout or rate limiting stopped the attack before it succeeded.",
+    },
+    "CORR-002": {
+        "summary": "A high volume of failed login attempts from {entity} was observed, consistent with an automated brute-force or credential-stuffing attack.",
+        "root_cause": "An external or internal source is systematically attempting to guess valid credentials against exposed authentication services.",
+    },
+    "CORR-003": {
+        "summary": "A suspicious process was created on {entity} shortly before a privilege escalation event, suggesting local exploitation or abuse of a legitimate tool.",
+        "root_cause": "A process running with unusual characteristics (unsigned, obfuscated, or a known offensive-security tool) was used as a stepping stone to gain higher privileges on the host.",
+    },
+    "CORR-004": {
+        "summary": "Reconnaissance/scanning traffic from {entity} was followed by an exploitation attempt (SQL injection or path traversal) against a web application.",
+        "root_cause": "An attacker fingerprinted the application using automated scanning tools, identified an injectable or traversable endpoint, and attempted to exploit it.",
+    },
+    "CORR-005": {
+        "summary": "Credentials were dumped from {entity}, followed by lateral movement and a large outbound data transfer - a complete data-theft chain.",
+        "root_cause": "An attacker with local access extracted credentials from memory or a credential store, used them to move to additional hosts, and exfiltrated data before detection.",
+    },
+    "CORR-006": {
+        "summary": "A full end-to-end intrusion was detected on {entity}: initial access via brute force, credential dumping, privilege escalation, and data exfiltration.",
+        "root_cause": "The attacker progressed through the full attack lifecycle - initial access, execution, credential access, privilege escalation, and exfiltration - without being stopped at any earlier stage.",
+    },
+    "RULE-AUTH-001": {
+        "summary": "A high volume of failed SSH login attempts targeted {entity}, consistent with an automated brute-force attack.",
+        "root_cause": "SSH is exposed to a source repeatedly attempting password authentication, indicating either a scan-and-attack bot or a targeted credential attack.",
+    },
+    "RULE-AUTH-003": {
+        "summary": "A privileged account logged in to {entity} under unusual conditions (new location, device, or time).",
+        "root_cause": "Either the legitimate administrator is operating from a new context, or the account's credentials have been compromised and are being used by an attacker.",
+    },
+    "RULE-WEB-001": {
+        "summary": "A SQL injection payload was submitted to a web application hosted on {entity}.",
+        "root_cause": "User-supplied input reached a SQL query without adequate parameterization or sanitization, allowing injection of attacker-controlled SQL.",
+    },
+    "RULE-WEB-002": {
+        "summary": "A path traversal payload was submitted to a web application hosted on {entity}, attempting to read files outside the web root.",
+        "root_cause": "A file-serving endpoint resolves user-supplied paths without canonicalization, allowing access to arbitrary filesystem paths.",
+    },
+    "RULE-EP-001": {
+        "summary": "PowerShell was executed on {entity} with encoding/obfuscation flags commonly used to hide malicious payloads.",
+        "root_cause": "A process (potentially a phishing payload or dropper) launched PowerShell with flags designed to evade logging and static detection.",
+    },
+    "RULE-EP-003": {
+        "summary": "A known credential dumping tool was executed on {entity}, indicating an attempt to steal cached credentials.",
+        "root_cause": "An attacker with local code execution used a credential-dumping utility against LSASS memory or a credential store to harvest reusable credentials.",
+    },
+    "RULE-CLOUD-002": {
+        "summary": "A burst of sensitive IAM API calls by {entity} suggests preparation for cloud account privilege escalation or persistence.",
+        "root_cause": "A principal (user or automation) created access keys, users, or attached policies in a pattern consistent with establishing unauthorized persistent access.",
+    },
+}
+
+_DEFAULT_NARRATIVE = {
+    "summary": "{title} was detected, involving {entity}.",
+    "root_cause": "The correlated alerts indicate suspicious activity consistent with: {chain}.",
+}
+
+
 class AISecurityAgent:
     """
     AI-powered security analyst agent that provides incident response recommendations.
@@ -481,6 +591,235 @@ Only respond with valid JSON, no additional text."""
                 "error": str(e),
                 "query": nl_query
             }
+
+    # ------------------------------------------------------------------
+    # Root Cause Analysis (RCA) for correlated incidents
+    #
+    # generate_incident_rca() is the entry point used by the API. It tries
+    # the Groq LLM first (if a key is configured), and always falls back to
+    # a deterministic, template-based RCA so the demo works with zero paid
+    # API dependency.
+    # ------------------------------------------------------------------
+
+    RCA_SECTIONS = [
+        "threat_summary",
+        "root_cause_analysis",
+        "evidence",
+        "mitre_attack_mapping",
+        "immediate_containment",
+        "investigation_steps",
+        "remediation",
+        "false_positive_considerations",
+        "prevention_measures",
+    ]
+
+    async def generate_incident_rca(self, incident: Dict[str, Any], force: bool = False) -> Dict[str, Any]:
+        """Generate (or retrieve cached) root cause analysis for an incident."""
+        incident_id = incident.get("incident_id", "unknown")
+
+        if not force:
+            cached = await self.get_rca_for_incident(incident_id)
+            if cached:
+                return cached
+
+        rca = None
+        if self.groq_api_key:
+            rca = await self._generate_llm_rca(incident)
+            if rca is None:
+                logger.warning(f"LLM RCA failed for {incident_id}, falling back to template mode")
+
+        if rca is None:
+            rca = self._generate_template_rca(incident)
+
+        await self._store_rca(incident_id, rca)
+        return rca
+
+    def _mitre_mapping_for(self, mitre_ids: List[str]) -> List[Dict[str, str]]:
+        mapping = []
+        for tech_id in mitre_ids:
+            mapping.append({
+                "id": tech_id,
+                "name": MITRE_TECHNIQUE_NAMES.get(tech_id, "Unclassified technique"),
+                "description": f"See https://attack.mitre.org/techniques/{tech_id.replace('.', '/')}/ for details.",
+            })
+        return mapping
+
+    def _generate_template_rca(self, incident: Dict[str, Any]) -> Dict[str, Any]:
+        """Deterministic, offline RCA generator - no external API required."""
+        pattern_id = incident.get("pattern_id", "")
+        title = incident.get("title") or incident.get("pattern_name") or "Security Incident"
+        severity = (incident.get("severity") or "medium").lower()
+        hosts = incident.get("hosts") or ([incident["host"]] if incident.get("host") else [])
+        users = incident.get("users") or ([incident["user"]] if incident.get("user") else [])
+        entity = hosts[0] if hosts else (users[0] if users else incident.get("ip", "the affected system"))
+        chain = incident.get("suspected_attack_chain") or title
+        timeline = incident.get("timeline") or []
+        mitre_ids = incident.get("mitre_techniques") or []
+        recommended = incident.get("recommended_actions") or []
+        false_positives = incident.get("false_positives") or []
+
+        narrative = TEMPLATE_NARRATIVES.get(pattern_id, _DEFAULT_NARRATIVE)
+        summary = narrative["summary"].format(entity=entity, title=title, chain=chain)
+        root_cause = narrative["root_cause"].format(
+            entity=entity,
+            user_or_account=(users[0] if users else "a valid account"),
+            host_or_entity=(hosts[0] if hosts else entity),
+            chain=chain,
+        )
+
+        evidence = [
+            f"{step.get('timestamp', '?')} - {step.get('rule_name', step.get('rule_id', 'event'))} "
+            f"on host={step.get('host', 'n/a')} user={step.get('user', 'n/a')} "
+            f"(severity={step.get('severity', 'n/a')})"
+            for step in timeline
+        ] or [f"{incident.get('alert_count', 0)} correlated alert(s) matched pattern {pattern_id or 'N/A'}."]
+
+        containment = [
+            f"Isolate/contain {entity} from the network pending investigation.",
+        ] + [a for a in recommended if "isolat" in a.lower() or "block" in a.lower() or "revoke" in a.lower()][:2]
+        if len(containment) == 1:
+            containment.append("Disable or reset credentials for any accounts involved until verified safe.")
+
+        investigation_steps = [
+            f"Pull the full event timeline for {entity} across the incident window "
+            f"({incident.get('first_seen', 'N/A')} to {incident.get('last_seen', 'N/A')}).",
+            "Correlate with authentication logs, EDR telemetry, and network flow data for the same window.",
+            "Identify whether any of the related alerts' source IPs are known-malicious (threat intel lookup).",
+            "Determine the full blast radius: what other hosts/accounts did this entity interact with afterward?",
+        ]
+
+        remediation = recommended[:8] or [
+            "Patch or reconfigure the vulnerable component that allowed this activity.",
+            "Review and tighten detection/prevention controls for this attack pattern.",
+        ]
+
+        fp_considerations = false_positives[:5] or [
+            "Confirm this activity wasn't an authorized penetration test or scheduled scan.",
+            "Check for known automation/service accounts that may legitimately trigger this pattern.",
+        ]
+
+        prevention = [
+            "Add this pattern to continuous detection coverage (already active via the correlation engine).",
+            "Run a tabletop exercise for this attack chain to validate response playbooks.",
+        ] + ([f"Track MITRE {mid} in the organization's control-mapping matrix." for mid in mitre_ids[:2]])
+
+        return {
+            "incident_id": incident.get("incident_id", "unknown"),
+            "mode": "template",
+            "ai_model": "template-fallback-v1",
+            "generated_at": datetime.utcnow().isoformat() + "Z",
+            "threat_summary": f"[{severity.upper()}] {summary}",
+            "root_cause_analysis": root_cause,
+            "evidence": evidence,
+            "mitre_attack_mapping": self._mitre_mapping_for(mitre_ids),
+            "immediate_containment": containment,
+            "investigation_steps": investigation_steps,
+            "remediation": remediation,
+            "false_positive_considerations": fp_considerations,
+            "prevention_measures": prevention,
+        }
+
+    def _format_incident_for_llm(self, incident: Dict[str, Any]) -> str:
+        return f"""INCIDENT DETAILS
+Title: {incident.get('title', 'Unknown')}
+Incident ID: {incident.get('incident_id', 'unknown')}
+Severity: {incident.get('severity', 'unknown')}
+Description: {incident.get('description', '')}
+Suspected Attack Chain: {incident.get('suspected_attack_chain', '')}
+Affected Hosts: {', '.join(incident.get('hosts') or [])}
+Affected Users: {', '.join(incident.get('users') or [])}
+Related MITRE Techniques: {', '.join(incident.get('mitre_techniques') or [])}
+Alert Count: {incident.get('alert_count', 0)}
+First Seen: {incident.get('first_seen', 'N/A')}
+Last Seen: {incident.get('last_seen', 'N/A')}
+
+TIMELINE:
+{json.dumps(incident.get('timeline', []), indent=2)}
+"""
+
+    async def _generate_llm_rca(self, incident: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Ask the Groq LLM for a structured RCA. Returns None on any failure so the caller can fall back."""
+        system_prompt = (
+            "You are an expert SOC analyst performing root cause analysis on a correlated security incident. "
+            "Respond with ONLY a valid JSON object (no markdown fences, no commentary) with exactly these keys: "
+            "threat_summary (string), root_cause_analysis (string), evidence (array of strings), "
+            "mitre_attack_mapping (array of objects with id/name/description), "
+            "immediate_containment (array of strings), investigation_steps (array of strings), "
+            "remediation (array of strings), false_positive_considerations (array of strings), "
+            "prevention_measures (array of strings)."
+        )
+        prompt = self._format_incident_for_llm(incident)
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                headers = {
+                    'Content-Type': 'application/json',
+                    'Authorization': f'Bearer {self.groq_api_key}'
+                }
+                payload = {
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": prompt},
+                    ],
+                    "model": self.model,
+                    "stream": False,
+                    "temperature": 0.4,
+                    "max_tokens": 2048,
+                    "response_format": {"type": "json_object"},
+                }
+                async with session.post(self.api_url, headers=headers, json=payload) as response:
+                    if response.status != 200:
+                        logger.error(f"Groq API error {response.status}: {await response.text()}")
+                        return None
+                    result = await response.json()
+                    content = result['choices'][0]['message']['content']
+
+            parsed = json.loads(_extract_json(content))
+            rca = {key: parsed.get(key) for key in self.RCA_SECTIONS}
+            if not rca.get("threat_summary"):
+                return None
+
+            rca.update({
+                "incident_id": incident.get("incident_id", "unknown"),
+                "mode": "llm",
+                "ai_model": self.model,
+                "generated_at": datetime.utcnow().isoformat() + "Z",
+            })
+            return rca
+        except Exception as e:
+            logger.error(f"Error generating LLM RCA: {e}")
+            return None
+
+    async def _store_rca(self, incident_id: str, rca: Dict[str, Any]):
+        """Store the RCA in OpenSearch, keyed by incident_id (upsert)."""
+        if not self.opensearch:
+            return
+        try:
+            if not self.opensearch.indices.exists(index="ai_rca"):
+                self.opensearch.indices.create(index="ai_rca")
+            self.opensearch.index(index="ai_rca", id=incident_id, body=rca, refresh=True)
+        except Exception as e:
+            logger.error(f"Error storing RCA for {incident_id}: {e}")
+
+    async def get_rca_for_incident(self, incident_id: str) -> Optional[Dict[str, Any]]:
+        """Fetch a previously generated RCA for an incident, if any."""
+        if not self.opensearch:
+            return None
+        try:
+            response = self.opensearch.get(index="ai_rca", id=incident_id)
+            return response["_source"]
+        except Exception:
+            return None
+
+
+def _extract_json(text: str) -> str:
+    """Strip markdown code fences from an LLM response, if present."""
+    text = text.strip()
+    if text.startswith("```"):
+        text = text.strip("`")
+        if text.lower().startswith("json"):
+            text = text[4:]
+    return text.strip()
 
 
 async def main():

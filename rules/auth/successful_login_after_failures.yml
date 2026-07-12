@@ -1,0 +1,43 @@
+id: RULE-AUTH-002
+name: Successful Login After Repeated Failures
+description: >
+  Detects a successful login that immediately follows a burst of failed
+  login attempts from the same source IP - a strong indicator that a brute
+  force attack has succeeded and the account may now be compromised. This is
+  a correlation (sequence) rule: it is evaluated by the correlation engine
+  across the alert/log stream rather than on a single event.
+severity: critical
+log_source: any
+type: sequence
+sequence:
+  group_by: ip
+  time_window_minutes: 10
+  steps:
+    - event_type: login_failure
+      min_count: 5
+    - event_type: login_success
+mitre_technique:
+  - id: T1110
+    name: Brute Force
+  - id: T1078
+    name: Valid Accounts
+false_positives:
+  - Legitimate user who mistyped their password several times before succeeding
+  - Shared workstation/kiosk with multiple users
+remediation:
+  - Force a password reset on the affected account immediately
+  - Review sessions and commands executed after the successful login
+  - Revoke active sessions / API tokens for the account
+  - Enable MFA to prevent single-factor account takeover
+sample_log:
+  timestamp: "2026-07-12T10:04:30Z"
+  source: linux
+  host: web-server-01
+  user: root
+  ip: 203.0.113.45
+  event_type: login_success
+  severity: high
+  raw:
+    service: ssh
+    message: "Accepted password for root from 203.0.113.45 port 51530 ssh2"
+    failed_attempts_before_success: 7

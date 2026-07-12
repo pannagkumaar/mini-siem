@@ -1,0 +1,39 @@
+id: RULE-CLOUD-001
+name: Publicly Accessible S3 Bucket Access
+description: >
+  Detects object access on an S3 (or S3-compatible) bucket configured with a
+  public-read/public-write ACL or bucket policy, which can expose sensitive
+  data to the internet.
+severity: high
+log_source: cloud
+type: single
+condition:
+  event_type: s3_access
+  raw.public: true
+mitre_technique:
+  - id: T1530
+    name: Data from Cloud Storage
+  - id: T1580
+    name: Cloud Infrastructure Discovery
+false_positives:
+  - Bucket intentionally used for public static website hosting
+  - Public assets bucket (images, downloads) by design
+remediation:
+  - Enable S3 Block Public Access at the account/bucket level
+  - Review and tighten the bucket policy / ACL to least privilege
+  - Enable access logging and versioning on the bucket
+  - Audit the bucket contents for sensitive data exposure
+sample_log:
+  timestamp: "2026-07-12T13:00:00Z"
+  source: custom
+  host: aws-s3
+  user: anonymous
+  ip: 198.51.100.200
+  event_type: s3_access
+  severity: high
+  raw:
+    bucket: company-backups-prod
+    object_key: "database/2026-07-11-full.sql.gz"
+    action: GetObject
+    public: true
+    acl: public-read

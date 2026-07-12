@@ -13,6 +13,9 @@ venv/
 .env
 .pytest_cache/
 
+# Generated report artifacts (regenerate with scripts/generate_incident_report.py)
+outputs/
+
 # Go (Syslog Server)
 *.exe
 *.test

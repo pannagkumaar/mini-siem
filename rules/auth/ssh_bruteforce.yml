@@ -1,0 +1,43 @@
+id: RULE-AUTH-001
+name: SSH Brute Force Attempt
+description: >
+  Detects a high volume of failed SSH login attempts from the same source IP
+  within a short time window, indicating an automated password-guessing
+  (brute force) attack against a Linux host.
+severity: high
+log_source: linux
+type: threshold
+condition:
+  event_type: login_failure
+  source: linux
+  raw.service:
+    contains: ssh
+threshold:
+  group_by: ip
+  count: 5
+  window_minutes: 5
+mitre_technique:
+  - id: T1110
+    name: Brute Force
+  - id: T1110.001
+    name: Password Guessing
+false_positives:
+  - Misconfigured automated jobs/scripts retrying authentication
+  - Users repeatedly mistyping their password
+  - Vulnerability scanners performing authorized credential testing
+remediation:
+  - Block the offending source IP at the firewall / security group
+  - Enable fail2ban or equivalent rate limiting on sshd
+  - Enforce SSH key-based authentication and disable password auth
+  - Require MFA for remote administrative access
+sample_log:
+  timestamp: "2026-07-12T10:00:00Z"
+  source: linux
+  host: web-server-01
+  user: root
+  ip: 203.0.113.45
+  event_type: login_failure
+  severity: high
+  raw:
+    service: ssh
+    message: "Failed password for root from 203.0.113.45 port 51512 ssh2"

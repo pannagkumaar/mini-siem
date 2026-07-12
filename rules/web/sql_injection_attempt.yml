@@ -1,0 +1,37 @@
+id: RULE-WEB-001
+name: SQL Injection Attempt
+description: >
+  Detects HTTP request URIs/parameters containing common SQL injection
+  payloads such as tautologies, UNION SELECT, or comment-based filter bypass
+  techniques against a web application.
+severity: high
+log_source: app
+type: single
+condition:
+  event_type: web_request
+  raw.uri:
+    regex: "(?i)(\\bunion\\b\\s+\\bselect\\b|\\bor\\b\\s+1=1|--|;--|%27|\\bdrop\\b\\s+\\btable\\b|\\bxp_cmdshell\\b)"
+mitre_technique:
+  - id: T1190
+    name: Exploit Public-Facing Application
+false_positives:
+  - Security scanners/pentest tools authorized to test the application
+  - Legitimate content containing SQL-like keywords (rare)
+remediation:
+  - Use parameterized queries / prepared statements everywhere
+  - Deploy or tune a WAF rule for SQLi payload patterns
+  - Apply least-privilege DB accounts for the web application
+  - Patch/validate all user-supplied input server-side
+sample_log:
+  timestamp: "2026-07-12T11:22:10Z"
+  source: app
+  host: web-server-01
+  user: anonymous
+  ip: 198.51.100.77
+  event_type: web_request
+  severity: high
+  raw:
+    method: GET
+    uri: "/products?id=1' OR 1=1--"
+    status: 500
+    user_agent: "Mozilla/5.0"

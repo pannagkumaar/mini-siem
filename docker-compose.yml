@@ -100,21 +100,11 @@ services:
       - detection-engine
     restart: unless-stopped
 
-  ai-agent:
-    build:
-      context: .
-      dockerfile: ai-agent/Dockerfile
-    container_name: ai-agent
-    environment:
-      - GROQ_API_KEY=${GROQ_API_KEY}
-      - OPENSEARCH_HOST=opensearch-node
-      - OPENSEARCH_PORT=9200
-    networks:
-      - siem-net
-    depends_on:
-      - opensearch
-      - detection-engine
-    restart: unless-stopped
+  # Note: there is no standalone "ai-agent" container. The AI Security Agent
+  # (ingestion/api-python/ai_agent) runs inside the ingestion-api service and
+  # is reachable through its /ai/* endpoints. It uses GROQ_API_KEY when set
+  # (ingestion-api environment above) and falls back to a deterministic
+  # template-based RCA when it is not.
 
 volumes:
   opensearch-data:

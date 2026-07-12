@@ -60,17 +60,27 @@ export const ingestLogs = async (logs) => {
 
 // Start incident investigation
 export const startInvestigation = async (incidentId) => {
-  return apiClient.post(`/incidents/${incidentId}/investigate`)
+  return apiClient.put(`/incidents/${incidentId}/investigate`)
 }
 
 // Resolve incident
 export const resolveIncident = async (incidentId, notes = '') => {
-  return apiClient.post(`/incidents/${incidentId}/resolve`, { notes })
+  return apiClient.put(`/incidents/${incidentId}/resolve`, { notes })
 }
 
 // Update incident status
 export const updateIncidentStatus = async (incidentId, status, notes = '') => {
-  return apiClient.post(`/incidents/${incidentId}/status`, { status, notes })
+  return apiClient.put(`/incidents/${incidentId}/status`, { status, notes })
+}
+
+// Generate (or fetch cached) AI root cause analysis for an incident
+export const generateIncidentRCA = async (incidentId, force = false) => {
+  return apiClient.post(`/ai/rca/${incidentId}${force ? '?force=true' : ''}`)
+}
+
+// Get existing AI RCA for an incident, if any
+export const getIncidentRCA = async (incidentId) => {
+  return apiClient.get(`/ai/rca/${incidentId}`)
 }
 
 // Search logs with advanced query

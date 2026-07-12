@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Any, Union, Optional
 from fastapi import FastAPI, Request, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 from opensearchpy import OpenSearch
 import threading
 
@@ -52,6 +53,15 @@ def generate_unique_incident_id(pattern_id: str, host: str = None, user: str = N
     hash_suffix = hashlib.md5(unique_str.encode()).hexdigest()[:8]
     
     return f"{pattern_id}-{hash_suffix}"
+
+
+class IncidentStatusUpdate(BaseModel):
+    status: str
+    notes: Optional[str] = None
+
+
+class IncidentResolveRequest(BaseModel):
+    notes: Optional[str] = None
 
 # Configure enhanced logging with timestamps and colors
 class ColoredFormatter(logging.Formatter):
@@ -354,29 +364,27 @@ def get_recent_incidents(hours: int = 24):
         }
         
         response = opensearch_client.search(index="incidents", body=query)
-        
+
         incidents = []
         seen_ids = set()  # Track unique incidents
         skipped = 0
-        
+
         for hit in response["hits"]["hits"]:
             incident = hit["_source"]
-            
-            # Generate unique ID based on pattern + host + user
-            pattern_id = incident.get("pattern_id", hit["_id"])
-            host = incident.get("host", "unknown")
-            user = incident.get("user", "unknown")
-            unique_id = generate_unique_incident_id(pattern_id, host, user)
-            
-            # Skip duplicates (same pattern on same host/user)
+
+            # The correlation engine assigns a deterministic incident_id
+            # (pattern + entity + time span), so we can dedupe on it directly
+            # instead of re-deriving one from host/user alone.
+            unique_id = incident.get("incident_id") or hit["_id"]
+
             if unique_id in seen_ids:
                 skipped += 1
                 continue
             seen_ids.add(unique_id)
-            
-            incident["_id"] = unique_id  # Override with unique ID
+
+            incident["_id"] = unique_id
             incidents.append(incident)
-        
+
         logger.info(f"Incidents: returned {len(incidents)}, skipped {skipped} duplicates")
         return {"incidents": incidents, "count": len(incidents)}
 
@@ -386,12 +394,8 @@ def get_recent_incidents(hours: int = 24):
         if correlation_engine:
             try:
                 incidents = correlation_engine.get_incidents(hours)
-                # Add unique IDs to fallback incidents too
                 for incident in incidents:
-                    pattern_id = incident.get("pattern_id", "UNKNOWN")
-                    host = incident.get("host", "unknown")
-                    user = incident.get("user", "unknown")
-                    incident["_id"] = generate_unique_incident_id(pattern_id, host, user)
+                    incident["_id"] = incident.get("incident_id", "UNKNOWN")
                 return {"incidents": incidents, "count": len(incidents)}
             except:
                 pass
@@ -570,38 +574,34 @@ def get_summary():
 
 
 @app.put("/incidents/{incident_id}/status")
-async def update_incident_status(incident_id: str, status: str):
+async def update_incident_status(incident_id: str, body: IncidentStatusUpdate):
     """
     Update incident status (open, investigating, resolved)
     """
     try:
         valid_statuses = ["open", "investigating", "resolved"]
-        if status.lower() not in valid_statuses:
+        status = body.status.lower()
+        if status not in valid_statuses:
             raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {', '.join(valid_statuses)}")
-        
-        # Try to get existing document first
+
+        doc_fields = {
+            "status": status,
+            "updated_at": datetime.utcnow().isoformat(),
+        }
+        if body.notes:
+            doc_fields["status_notes"] = body.notes
+
         try:
-            existing = opensearch_client.get(index="incidents", id=incident_id)
-            # Update existing document
-            update_body = {
-                "doc": {
-                    "status": status.lower(),
-                    "updated_at": datetime.utcnow().isoformat()
-                }
-            }
-            result = opensearch_client.update(index="incidents", id=incident_id, body=update_body)
-        except:
-            # Document doesn't exist, create it
-            doc = {
-                "pattern_id": incident_id,
-                "status": status.lower(),
-                "timestamp": datetime.utcnow().isoformat(),
-                "updated_at": datetime.utcnow().isoformat()
-            }
-            result = opensearch_client.index(index="incidents", id=incident_id, body=doc)
-        
+            opensearch_client.get(index="incidents", id=incident_id)
+            opensearch_client.update(index="incidents", id=incident_id, body={"doc": doc_fields})
+        except Exception:
+            doc_fields.update({"incident_id": incident_id, "pattern_id": incident_id, "timestamp": datetime.utcnow().isoformat()})
+            opensearch_client.index(index="incidents", id=incident_id, body=doc_fields)
+
         logger.info(f"Updated incident {incident_id} status to {status}")
         return {"success": True, "incident_id": incident_id, "status": status}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error updating incident status: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -613,29 +613,18 @@ async def start_investigation(incident_id: str):
     Mark incident as investigating
     """
     try:
-        # Try to get existing document first
+        doc_fields = {
+            "status": "investigating",
+            "investigation_started": datetime.utcnow().isoformat(),
+            "updated_at": datetime.utcnow().isoformat(),
+        }
         try:
-            existing = opensearch_client.get(index="incidents", id=incident_id)
-            # Update existing document
-            update_body = {
-                "doc": {
-                    "status": "investigating",
-                    "investigation_started": datetime.utcnow().isoformat(),
-                    "updated_at": datetime.utcnow().isoformat()
-                }
-            }
-            result = opensearch_client.update(index="incidents", id=incident_id, body=update_body)
-        except:
-            # Document doesn't exist, create it
-            doc = {
-                "pattern_id": incident_id,
-                "status": "investigating",
-                "timestamp": datetime.utcnow().isoformat(),
-                "investigation_started": datetime.utcnow().isoformat(),
-                "updated_at": datetime.utcnow().isoformat()
-            }
-            result = opensearch_client.index(index="incidents", id=incident_id, body=doc)
-        
+            opensearch_client.get(index="incidents", id=incident_id)
+            opensearch_client.update(index="incidents", id=incident_id, body={"doc": doc_fields})
+        except Exception:
+            doc_fields.update({"incident_id": incident_id, "pattern_id": incident_id, "timestamp": datetime.utcnow().isoformat()})
+            opensearch_client.index(index="incidents", id=incident_id, body=doc_fields)
+
         logger.info(f"Started investigation on incident {incident_id}")
         return {"success": True, "incident_id": incident_id, "message": "Investigation started"}
     except Exception as e:
@@ -644,40 +633,26 @@ async def start_investigation(incident_id: str):
 
 
 @app.put("/incidents/{incident_id}/resolve")
-async def resolve_incident(incident_id: str, notes: str = None):
+async def resolve_incident(incident_id: str, body: IncidentResolveRequest = IncidentResolveRequest()):
     """
     Resolve incident with optional notes
     """
     try:
-        # Try to get existing document first
+        doc_fields = {
+            "status": "resolved",
+            "resolved_at": datetime.utcnow().isoformat(),
+            "updated_at": datetime.utcnow().isoformat(),
+        }
+        if body.notes:
+            doc_fields["resolution_notes"] = body.notes
+
         try:
-            existing = opensearch_client.get(index="incidents", id=incident_id)
-            # Update existing document
-            update_body = {
-                "doc": {
-                    "status": "resolved",
-                    "resolved_at": datetime.utcnow().isoformat(),
-                    "updated_at": datetime.utcnow().isoformat()
-                }
-            }
-            if notes:
-                update_body["doc"]["resolution_notes"] = notes
-            
-            result = opensearch_client.update(index="incidents", id=incident_id, body=update_body)
-        except:
-            # Document doesn't exist, create it
-            doc = {
-                "pattern_id": incident_id,
-                "status": "resolved",
-                "timestamp": datetime.utcnow().isoformat(),
-                "resolved_at": datetime.utcnow().isoformat(),
-                "updated_at": datetime.utcnow().isoformat()
-            }
-            if notes:
-                doc["resolution_notes"] = notes
-            
-            result = opensearch_client.index(index="incidents", id=incident_id, body=doc)
-        
+            opensearch_client.get(index="incidents", id=incident_id)
+            opensearch_client.update(index="incidents", id=incident_id, body={"doc": doc_fields})
+        except Exception:
+            doc_fields.update({"incident_id": incident_id, "pattern_id": incident_id, "timestamp": datetime.utcnow().isoformat()})
+            opensearch_client.index(index="incidents", id=incident_id, body=doc_fields)
+
         logger.info(f"Resolved incident {incident_id}")
         return {"success": True, "incident_id": incident_id, "message": "Incident resolved"}
     except Exception as e:
@@ -1053,6 +1028,46 @@ async def get_ai_stats():
                 "status": "error"
             }
         }
+
+
+@app.post("/ai/rca/{incident_id}")
+async def generate_incident_rca(incident_id: str, force: bool = False):
+    """
+    Generate a root cause analysis (RCA) for a correlated incident.
+
+    Uses the Groq LLM when GROQ_API_KEY is configured; otherwise falls back
+    to a deterministic, template-based RCA so this works with zero paid API
+    dependency. Results are cached in the ai_rca index (pass ?force=true to
+    regenerate).
+    """
+    if not ai_agent:
+        raise HTTPException(status_code=503, detail="AI agent not available")
+
+    try:
+        incident_doc = opensearch_client.get(index="incidents", id=incident_id)["_source"]
+    except Exception:
+        raise HTTPException(status_code=404, detail=f"Incident {incident_id} not found")
+
+    incident_doc.setdefault("incident_id", incident_id)
+
+    try:
+        rca = await ai_agent.generate_incident_rca(incident_doc, force=force)
+        return {"success": True, "incident_id": incident_id, "rca": rca}
+    except Exception as e:
+        logger.error(f"Error generating RCA for incident {incident_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"RCA generation failed: {str(e)}")
+
+
+@app.get("/ai/rca/{incident_id}")
+async def get_incident_rca(incident_id: str):
+    """Get a previously generated RCA for an incident, if one exists."""
+    if not ai_agent:
+        raise HTTPException(status_code=503, detail="AI agent not available")
+
+    rca = await ai_agent.get_rca_for_incident(incident_id)
+    if rca:
+        return {"success": True, "incident_id": incident_id, "rca": rca}
+    return {"success": True, "incident_id": incident_id, "rca": None, "message": "No RCA generated yet"}
 
 
 @app.post("/ai/convert-query")

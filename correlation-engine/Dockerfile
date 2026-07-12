@@ -10,6 +10,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy correlation engine code
 COPY correlation-engine/ ./correlation-engine/
+COPY rules/ ./rules/
 
 WORKDIR /app/correlation-engine
 

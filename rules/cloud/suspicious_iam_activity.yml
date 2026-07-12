@@ -1,0 +1,47 @@
+id: RULE-CLOUD-002
+name: Suspicious IAM Activity (Privilege Escalation Prep)
+description: >
+  Detects a burst of sensitive IAM API calls (creating access keys, users, or
+  attaching policies) by the same principal in a short window - a common
+  precursor to cloud account takeover / privilege escalation.
+severity: high
+log_source: cloud
+type: threshold
+condition:
+  event_type: iam_activity
+  raw.action:
+    in:
+      - CreateAccessKey
+      - AttachUserPolicy
+      - CreateUser
+      - PutUserPolicy
+      - CreateLoginProfile
+threshold:
+  group_by: user
+  count: 3
+  window_minutes: 10
+mitre_technique:
+  - id: T1098
+    name: Account Manipulation
+  - id: T1136
+    name: Create Account
+false_positives:
+  - Cloud/IAM administrator performing legitimate bulk user provisioning
+  - Infrastructure-as-code pipeline applying IAM changes
+remediation:
+  - Review CloudTrail for the principal's full activity history
+  - Revoke newly created access keys/users pending investigation
+  - Require MFA and approval workflow for IAM-changing API calls
+  - Alert on and restrict use of long-lived IAM user credentials
+sample_log:
+  timestamp: "2026-07-12T13:05:00Z"
+  source: custom
+  host: aws-iam
+  user: svc-deploy
+  ip: 198.51.100.201
+  event_type: iam_activity
+  severity: high
+  raw:
+    action: CreateAccessKey
+    target_user: svc-deploy
+    source_service: iam.amazonaws.com

@@ -19,6 +19,7 @@ COPY ingestion/api-python/ai_agent ./ai_agent
 COPY parser ./parser
 COPY detection-engine ./detection-engine
 COPY correlation-engine ./correlation-engine
+COPY rules ./rules
 
 # Specify the command to run on container startup
 # Use 0.0.0.0 to make it accessible from outside the container
