@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { getRules } from '../api'
+import { Panel, SeverityTag, NeutralTag, ConsoleSpinner, Chevron, SEVERITY_COLOR, hexToRgba } from './ui'
 
 const API_BASE = 'http://localhost:8000'
 
@@ -75,9 +76,7 @@ export function RulesClean() {
 
       const response = await fetch(`${API_BASE}/rules/create`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(ruleYaml)
       })
 
@@ -113,38 +112,17 @@ export function RulesClean() {
   }
 
   const addCondition = () => {
-    setNewRule({
-      ...newRule,
-      conditions: [...newRule.conditions, { field: '', operator: '', value: '' }]
-    })
+    setNewRule({ ...newRule, conditions: [...newRule.conditions, { field: '', operator: '', value: '' }] })
   }
 
   const removeCondition = (index) => {
-    setNewRule({
-      ...newRule,
-      conditions: newRule.conditions.filter((_, i) => i !== index)
-    })
+    setNewRule({ ...newRule, conditions: newRule.conditions.filter((_, i) => i !== index) })
   }
 
   const updateCondition = (index, field, value) => {
     const updated = [...newRule.conditions]
     updated[index] = { ...updated[index], [field]: value }
     setNewRule({ ...newRule, conditions: updated })
-  }
-
-  const getSeverityColor = (severity) => {
-    switch (severity?.toLowerCase()) {
-      case 'critical':
-        return 'bg-red-900/50 text-red-200 border-red-800'
-      case 'high':
-        return 'bg-orange-900/50 text-orange-200 border-orange-800'
-      case 'medium':
-        return 'bg-yellow-900/50 text-yellow-200 border-yellow-800'
-      case 'low':
-        return 'bg-blue-900/50 text-blue-200 border-blue-800'
-      default:
-        return 'bg-gray-800 text-gray-300 border-gray-700'
-    }
   }
 
   const filteredRules = filterSeverity
@@ -154,128 +132,132 @@ export function RulesClean() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex justify-between items-center">
+      <div className="flex justify-between items-end">
         <div>
-          <h2 className="text-2xl font-semibold text-gray-100">Detection Rules</h2>
-          <p className="text-sm text-gray-500 mt-1">Manage security detection patterns</p>
+          <h1 className="text-xl font-semibold text-bone tracking-tight">Rules</h1>
+          <p className="eyebrow mt-1">Detection patterns</p>
         </div>
-        <button
-          onClick={() => setShowCreateModal(true)}
-          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-sm text-white transition"
-        >
+        <button onClick={() => setShowCreateModal(true)} className="btn is-active">
           Create Rule
         </button>
       </div>
 
       {error && (
-        <div className="bg-red-900/20 border border-red-800 rounded px-4 py-3 text-red-200 text-sm">
-          <span className="font-medium">Error:</span> {error}
+        <div className="border rounded px-4 py-3 text-sm mono" style={{ borderColor: 'var(--crit)', color: 'var(--crit)', background: 'rgba(255,77,61,0.06)' }}>
+          {error}
         </div>
       )}
 
       {loading ? (
-        <div className="bg-[#0f1629] border border-[#1a2332] rounded p-12 text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-2 border-blue-500 border-t-transparent mx-auto mb-4"></div>
-          <p className="text-gray-400 text-sm">Loading rules</p>
-        </div>
+        <ConsoleSpinner label="Loading rules" />
       ) : !stats || !stats.rules || stats.rules.length === 0 ? (
-        <div className="bg-[#0f1629] border border-[#1a2332] rounded p-12 text-center">
-          <p className="text-gray-400">No rules available</p>
-        </div>
+        <Panel className="p-12 text-center">
+          <p className="text-dim text-sm">No rules available</p>
+        </Panel>
       ) : (
         <>
-          {/* Summary Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-            <div className="bg-[#0f1629] border border-[#1a2332] rounded p-4">
-              <p className="text-xs text-gray-500 uppercase tracking-wide">Total</p>
-              <p className="text-2xl font-semibold text-gray-100 mt-1">{stats.total_rules}</p>
-            </div>
+          {/* Summary strip */}
+          <Panel className="flex flex-wrap divide-x divide-line">
+            <button
+              onClick={() => setFilterSeverity(null)}
+              className={`flex-1 min-w-[120px] px-5 py-4 text-left transition-colors ${filterSeverity === null ? 'bg-panel2' : 'hover:bg-panel2/60'}`}
+            >
+              <div className="eyebrow">Total</div>
+              <div className="mono text-2xl font-semibold text-bone mt-1 tabular-nums">{stats.total_rules}</div>
+            </button>
 
-            {stats.by_severity && Object.entries(stats.by_severity).map(([severity, count]) => (
-              <div 
-                key={severity}
-                className={`bg-[#0f1629] border rounded p-4 cursor-pointer transition ${
-                  filterSeverity === severity ? 'border-blue-500' : 'border-[#1a2332] hover:border-[#2a3f5f]'
-                }`}
-                onClick={() => setFilterSeverity(filterSeverity === severity ? null : severity)}
-              >
-                <p className="text-xs text-gray-500 uppercase tracking-wide">{severity}</p>
-                <p className="text-2xl font-semibold text-gray-100 mt-1">{count}</p>
-              </div>
-            ))}
-          </div>
+            {stats.by_severity && Object.entries(stats.by_severity).map(([severity, count]) => {
+              const color = SEVERITY_COLOR[severity] || '#6a6a70'
+              const active = filterSeverity === severity
+              return (
+                <button
+                  key={severity}
+                  onClick={() => setFilterSeverity(active ? null : severity)}
+                  className="flex-1 min-w-[120px] px-5 py-4 text-left transition-colors"
+                  style={active ? { background: hexToRgba(color, 0.08) } : undefined}
+                >
+                  <div className="eyebrow capitalize" style={active ? { color } : undefined}>{severity}</div>
+                  <div className="mono text-2xl font-semibold mt-1 tabular-nums" style={{ color: active ? color : 'var(--bone)' }}>
+                    {count}
+                  </div>
+                </button>
+              )
+            })}
+          </Panel>
 
-          {/* Filter Indicator */}
           {filterSeverity && (
-            <div className="flex items-center justify-between bg-[#0f1629] border border-[#1a2332] rounded px-4 py-2 text-sm">
-              <p className="text-gray-400">
-                Filtered by: <span className={`font-medium px-2 py-0.5 rounded border ml-2 ${getSeverityColor(filterSeverity)}`}>
-                  {filterSeverity}
-                </span>
-              </p>
-              <button
-                onClick={() => setFilterSeverity(null)}
-                className="text-blue-400 hover:text-blue-300 text-xs"
-              >
-                Clear filter
+            <div className="flex items-center justify-between px-4 py-2 panel text-sm">
+              <div className="flex items-center gap-2">
+                <span className="text-dim">Filtered by</span>
+                <SeverityTag severity={filterSeverity} />
+              </div>
+              <button onClick={() => setFilterSeverity(null)} className="eyebrow text-signal hover:underline">
+                Clear
               </button>
             </div>
           )}
 
           {/* Rules List */}
-          <div className="space-y-3">
+          <div className="space-y-2">
             {filteredRules.map((rule) => (
-              <div 
-                key={rule.id}
-                className="bg-[#0f1629] border border-[#1a2332] rounded overflow-hidden"
-              >
-                <div 
-                  className="p-5 cursor-pointer hover:bg-[#151b2e] transition"
+              <Panel key={rule.id} className="overflow-hidden">
+                <div
+                  className="p-4 cursor-pointer hover:bg-panel2 transition-colors"
                   onClick={() => setExpandedId(expandedId === rule.id ? null : rule.id)}
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
-                      <div className="flex items-center space-x-3 mb-2">
-                        <span className={`px-2 py-0.5 rounded text-xs font-medium border ${getSeverityColor(rule.severity)}`}>
-                          {rule.severity}
-                        </span>
-                        <span className="text-gray-600 text-xs font-mono">{rule.id}</span>
+                      <div className="flex items-center gap-3 mb-2">
+                        <SeverityTag severity={rule.severity} />
+                        <span className="mono text-[11px] text-faint">{rule.id}</span>
+                        {rule.type && <NeutralTag>{rule.type}</NeutralTag>}
                       </div>
-                      <h3 className="text-base font-medium text-gray-100 mb-1">{rule.name}</h3>
-                      <p className="text-sm text-gray-400">{rule.description}</p>
+                      <h3 className="text-[15px] font-medium text-bone mb-1">{rule.name}</h3>
+                      <p className="text-sm text-dim">{rule.description}</p>
                     </div>
-                    <svg 
-                      className={`w-5 h-5 text-gray-500 transition-transform ${expandedId === rule.id ? 'rotate-180' : ''}`}
-                      fill="none" 
-                      stroke="currentColor" 
-                      viewBox="0 0 24 24"
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
+                    <Chevron open={expandedId === rule.id} />
                   </div>
                 </div>
 
                 {expandedId === rule.id && (
-                  <div className="px-5 pb-5 border-t border-[#1a2332] pt-4 bg-[#0a0e27]">
-                    <h4 className="text-xs font-medium text-gray-500 mb-2 uppercase tracking-wide">Conditions</h4>
-                    <div className="bg-[#0f1629] border border-[#1a2332] rounded p-3 font-mono text-xs text-gray-300">
+                  <div className="px-4 pb-4 border-t hairline pt-4">
+                    <div className="eyebrow mb-2">Condition</div>
+                    <div className="border hairline rounded p-3 mono text-xs text-dim">
                       <pre className="whitespace-pre-wrap">{JSON.stringify(rule.condition, null, 2)}</pre>
                     </div>
+                    {rule.threshold && (
+                      <div className="mt-3">
+                        <div className="eyebrow mb-2">Threshold</div>
+                        <div className="border hairline rounded p-3 mono text-xs text-dim">
+                          <pre className="whitespace-pre-wrap">{JSON.stringify(rule.threshold, null, 2)}</pre>
+                        </div>
+                      </div>
+                    )}
                     {rule.mitre_tag && rule.mitre_tag.length > 0 && (
                       <div className="mt-3">
-                        <h4 className="text-xs font-medium text-gray-500 mb-2 uppercase tracking-wide">MITRE ATT&CK</h4>
+                        <div className="eyebrow mb-2">MITRE ATT&amp;CK</div>
                         <div className="flex flex-wrap gap-2">
                           {rule.mitre_tag.map((tag, idx) => (
-                            <span key={idx} className="px-2 py-0.5 bg-purple-900/50 text-purple-200 border border-purple-800 rounded text-xs font-mono">
-                              {tag}
-                            </span>
+                            <NeutralTag key={idx}>{tag}</NeutralTag>
                           ))}
                         </div>
                       </div>
                     )}
+                    {rule.remediation && rule.remediation.length > 0 && (
+                      <div className="mt-3">
+                        <div className="eyebrow mb-2">Remediation</div>
+                        <ul className="space-y-1">
+                          {rule.remediation.map((r, i) => (
+                            <li key={i} className="text-sm text-bone/90 flex gap-2">
+                              <span className="text-faint">&mdash;</span>{r}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                   </div>
                 )}
-              </div>
+              </Panel>
             ))}
           </div>
         </>
@@ -284,52 +266,46 @@ export function RulesClean() {
       {/* Create Rule Modal */}
       {showCreateModal && (
         <div className="fixed inset-0 bg-black/75 flex items-center justify-center z-50 p-4">
-          <div className="bg-[#0f1629] border border-[#1a2332] rounded max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-5 border-b border-[#1a2332] flex justify-between items-center sticky top-0 bg-[#0f1629] z-10">
-              <h2 className="text-lg font-semibold text-gray-100">Create Detection Rule</h2>
-              <button 
-                onClick={() => { setShowCreateModal(false); resetForm(); }}
-                className="text-gray-400 hover:text-gray-300"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
+          <Panel className="max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-5 border-b hairline flex justify-between items-center sticky top-0 bg-panel z-10">
+              <h2 className="text-lg font-semibold text-bone">Create Detection Rule</h2>
+              <button onClick={() => { setShowCreateModal(false); resetForm(); }} className="text-faint hover:text-bone">
+                &times;
               </button>
             </div>
 
             <form onSubmit={handleCreateRule} className="p-5 space-y-5">
               {createError && (
-                <div className="bg-red-900/20 border border-red-800 rounded px-4 py-3 text-red-200 text-sm">
-                  <span className="font-medium">Error:</span> {createError}
+                <div className="border rounded px-4 py-3 text-sm mono" style={{ borderColor: 'var(--crit)', color: 'var(--crit)', background: 'rgba(255,77,61,0.06)' }}>
+                  {createError}
                 </div>
               )}
-
               {createSuccess && (
-                <div className="bg-green-900/20 border border-green-800 rounded px-4 py-3 text-green-200 text-sm">
-                  <span className="font-medium">Success:</span> Rule created successfully
+                <div className="border rounded px-4 py-3 text-sm mono" style={{ borderColor: 'var(--ok)', color: 'var(--ok)', background: 'rgba(62,207,142,0.06)' }}>
+                  Rule created successfully
                 </div>
               )}
 
               <div className="space-y-4">
                 <div>
-                  <label className="block text-xs font-medium text-gray-400 mb-1.5">Rule Name *</label>
+                  <label className="eyebrow block mb-1.5">Rule Name *</label>
                   <input
                     type="text"
                     required
                     value={newRule.name}
                     onChange={(e) => setNewRule({ ...newRule, name: e.target.value })}
-                    className="w-full bg-[#0a0e27] border border-[#1a2332] rounded px-3 py-2 text-sm text-gray-100 focus:border-blue-500 focus:outline-none"
+                    className="field w-full px-3 py-2 text-sm"
                     placeholder="e.g., Suspicious PowerShell Execution"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-gray-400 mb-1.5">Description *</label>
+                  <label className="eyebrow block mb-1.5">Description *</label>
                   <textarea
                     required
                     value={newRule.description}
                     onChange={(e) => setNewRule({ ...newRule, description: e.target.value })}
-                    className="w-full bg-[#0a0e27] border border-[#1a2332] rounded px-3 py-2 text-sm text-gray-100 focus:border-blue-500 focus:outline-none"
+                    className="field w-full px-3 py-2 text-sm"
                     rows="2"
                     placeholder="Describe what this rule detects"
                   />
@@ -337,12 +313,12 @@ export function RulesClean() {
 
                 <div className="grid grid-cols-3 gap-3">
                   <div>
-                    <label className="block text-xs font-medium text-gray-400 mb-1.5">Severity *</label>
+                    <label className="eyebrow block mb-1.5">Severity *</label>
                     <select
                       required
                       value={newRule.severity}
                       onChange={(e) => setNewRule({ ...newRule, severity: e.target.value })}
-                      className="w-full bg-[#0a0e27] border border-[#1a2332] rounded px-3 py-2 text-sm text-gray-100 focus:border-blue-500 focus:outline-none"
+                      className="field w-full px-3 py-2 text-sm"
                     >
                       <option value="low">Low</option>
                       <option value="medium">Medium</option>
@@ -352,24 +328,24 @@ export function RulesClean() {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-medium text-gray-400 mb-1.5">Event Type *</label>
+                    <label className="eyebrow block mb-1.5">Event Type *</label>
                     <input
                       type="text"
                       required
                       value={newRule.event_type}
                       onChange={(e) => setNewRule({ ...newRule, event_type: e.target.value })}
-                      className="w-full bg-[#0a0e27] border border-[#1a2332] rounded px-3 py-2 text-sm text-gray-100 focus:border-blue-500 focus:outline-none"
+                      className="field w-full px-3 py-2 text-sm"
                       placeholder="process_create"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-xs font-medium text-gray-400 mb-1.5">Source</label>
+                    <label className="eyebrow block mb-1.5">Source</label>
                     <input
                       type="text"
                       value={newRule.source}
                       onChange={(e) => setNewRule({ ...newRule, source: e.target.value })}
-                      className="w-full bg-[#0a0e27] border border-[#1a2332] rounded px-3 py-2 text-sm text-gray-100 focus:border-blue-500 focus:outline-none"
+                      className="field w-full px-3 py-2 text-sm"
                       placeholder="windows"
                     />
                   </div>
@@ -378,12 +354,8 @@ export function RulesClean() {
 
               <div className="space-y-3">
                 <div className="flex justify-between items-center">
-                  <h3 className="text-xs font-medium text-gray-400 uppercase tracking-wide">Additional Conditions</h3>
-                  <button
-                    type="button"
-                    onClick={addCondition}
-                    className="px-2 py-1 bg-[#1a2744] hover:bg-[#1f2d4f] border border-[#2a3f5f] rounded text-xs text-gray-300"
-                  >
+                  <h3 className="eyebrow">Additional Conditions</h3>
+                  <button type="button" onClick={addCondition} className="btn">
                     Add Condition
                   </button>
                 </div>
@@ -394,13 +366,13 @@ export function RulesClean() {
                       type="text"
                       value={condition.field}
                       onChange={(e) => updateCondition(index, 'field', e.target.value)}
-                      className="flex-1 bg-[#0a0e27] border border-[#1a2332] rounded px-3 py-2 text-sm text-gray-100 focus:border-blue-500 focus:outline-none"
+                      className="field flex-1 px-3 py-2 text-sm"
                       placeholder="Field"
                     />
                     <select
                       value={condition.operator}
                       onChange={(e) => updateCondition(index, 'operator', e.target.value)}
-                      className="bg-[#0a0e27] border border-[#1a2332] rounded px-3 py-2 text-sm text-gray-100 focus:border-blue-500 focus:outline-none"
+                      className="field px-3 py-2 text-sm"
                     >
                       <option value="">Operator</option>
                       <option value="equals">Equals</option>
@@ -411,41 +383,38 @@ export function RulesClean() {
                       type="text"
                       value={condition.value}
                       onChange={(e) => updateCondition(index, 'value', e.target.value)}
-                      className="flex-1 bg-[#0a0e27] border border-[#1a2332] rounded px-3 py-2 text-sm text-gray-100 focus:border-blue-500 focus:outline-none"
+                      className="field flex-1 px-3 py-2 text-sm"
                       placeholder="Value"
                     />
                     {newRule.conditions.length > 1 && (
                       <button
                         type="button"
                         onClick={() => removeCondition(index)}
-                        className="px-3 py-2 bg-red-900/50 hover:bg-red-900/70 border border-red-800 rounded text-white text-sm"
+                        className="btn px-3"
+                        style={{ borderColor: 'var(--crit)', color: 'var(--crit)' }}
                       >
-                        ×
+                        &times;
                       </button>
                     )}
                   </div>
                 ))}
               </div>
 
-              <div className="flex justify-end space-x-3 pt-4 border-t border-[#1a2332]">
+              <div className="flex justify-end gap-3 pt-4 border-t hairline">
                 <button
                   type="button"
                   onClick={() => { setShowCreateModal(false); resetForm(); }}
-                  className="px-4 py-2 bg-[#1a2744] hover:bg-[#1f2d4f] border border-[#2a3f5f] rounded text-sm text-gray-300"
+                  className="btn"
                   disabled={creating}
                 >
                   Cancel
                 </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-sm text-white disabled:opacity-50"
-                  disabled={creating}
-                >
-                  {creating ? 'Creating...' : 'Create Rule'}
+                <button type="submit" className="btn is-active" disabled={creating}>
+                  {creating ? 'Creating…' : 'Create Rule'}
                 </button>
               </div>
             </form>
-          </div>
+          </Panel>
         </div>
       )}
     </div>
