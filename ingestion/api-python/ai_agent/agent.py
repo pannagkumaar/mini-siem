@@ -1,8 +1,11 @@
 """
 AI Agent for SIEM Alert Analysis
 
-Uses Groq API to analyze security alerts and provide actionable recommendations
-for incident response and remediation.
+Analyzes security alerts and incidents and provides actionable incident
+response recommendations. Supports multiple LLM providers - Groq, OpenAI,
+Anthropic, and Google Gemini - auto-detected from whichever API key is
+configured (see LLM_PROVIDERS below), with a deterministic template-based
+fallback when none are available.
 """
 
 import os
@@ -10,7 +13,7 @@ import json
 import logging
 import asyncio
 import aiohttp
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Any, Optional
 from opensearchpy import OpenSearch
 
@@ -39,6 +42,13 @@ if not logger.handlers:
     handler.setFormatter(ColoredFormatter())
     logger.addHandler(handler)
     logger.setLevel(logging.INFO)
+
+
+def utcnow() -> datetime:
+    """Naive UTC datetime, matching the (deprecated) utcnow()
+    return shape so every existing `.isoformat() + "Z"` call site keeps
+    producing correct ISO8601 strings without using the deprecated API."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 # Human-readable names for the MITRE ATT&CK technique IDs used across the
@@ -151,20 +161,86 @@ _DEFAULT_NARRATIVE = {
 }
 
 
+class LLMProviderConfig:
+    """Static config for one supported LLM provider."""
+
+    def __init__(self, name: str, env_var: str, api_url: str, default_model: str, model_env_var: str = None):
+        self.name = name
+        self.env_var = env_var
+        self.api_url = api_url
+        self.default_model = default_model
+        self.model_env_var = model_env_var or f"{name.upper()}_MODEL"
+
+
+# Every provider here speaks a different wire format (see _call_llm below),
+# but the same env-var-driven auto-detect and template fallback wrap all of
+# them identically. Order matters only when AI_PROVIDER isn't set and more
+# than one key happens to be configured - first match wins.
+LLM_PROVIDERS = [
+    LLMProviderConfig("groq", "GROQ_API_KEY", "https://api.groq.com/openai/v1/chat/completions", "llama-3.3-70b-versatile"),
+    LLMProviderConfig("openai", "OPENAI_API_KEY", "https://api.openai.com/v1/chat/completions", "gpt-4o-mini"),
+    LLMProviderConfig("anthropic", "ANTHROPIC_API_KEY", "https://api.anthropic.com/v1/messages", "claude-3-5-haiku-20241022"),
+    LLMProviderConfig("gemini", "GEMINI_API_KEY", "https://generativelanguage.googleapis.com/v1beta/models", "gemini-1.5-flash"),
+]
+
+
+def _detect_provider(preferred: Optional[str] = None):
+    """Return (LLMProviderConfig, api_key) for the first configured provider,
+    checking `preferred` first if given. None if no provider key is set."""
+    by_name = {p.name: p for p in LLM_PROVIDERS}
+    ordered_names = [preferred] if preferred in by_name else []
+    ordered_names += [p.name for p in LLM_PROVIDERS if p.name != preferred]
+
+    for name in ordered_names:
+        cfg = by_name[name]
+        key = os.getenv(cfg.env_var)
+        if key:
+            return cfg, key
+    return None, None
+
+
 class AISecurityAgent:
     """
     AI-powered security analyst agent that provides incident response recommendations.
     """
-    
-    def __init__(self, opensearch_client: OpenSearch, groq_api_key: str = None):
+
+    def __init__(self, opensearch_client: OpenSearch, groq_api_key: str = None, provider: str = None):
         self.opensearch = opensearch_client
-        self.groq_api_key = groq_api_key or os.getenv("GROQ_API_KEY")
-        self.model = "llama-3.3-70b-versatile"
-        self.api_url = "https://api.groq.com/openai/v1/chat/completions"
-        
-        if not self.groq_api_key:
-            logger.warning("No Groq API key provided. AI agent will be disabled.")
-    
+
+        if groq_api_key:
+            # Explicit constructor arg is a forced override (back-compat with
+            # the original Groq-only signature).
+            self.provider_cfg = next(p for p in LLM_PROVIDERS if p.name == "groq")
+            self.api_key = groq_api_key
+        else:
+            self.provider_cfg, self.api_key = _detect_provider(provider or os.getenv("AI_PROVIDER"))
+
+        self.provider_name = self.provider_cfg.name if self.provider_cfg else None
+        if self.provider_cfg:
+            self.model = os.getenv(self.provider_cfg.model_env_var) or self.provider_cfg.default_model
+            self.api_url = self.provider_cfg.api_url
+        else:
+            self.model = "template-fallback-v1"
+            self.api_url = None
+
+        if not self.api_key:
+            configured_vars = ", ".join(p.env_var for p in LLM_PROVIDERS)
+            logger.warning(f"No LLM provider API key found (checked {configured_vars}). AI agent will use template mode.")
+        else:
+            logger.info(f"AI agent using provider: {self.provider_name} ({self.model})")
+
+    @property
+    def llm_enabled(self) -> bool:
+        """True when any LLM provider key is configured (else template mode)."""
+        return bool(self.api_key)
+
+    @property
+    def groq_api_key(self) -> Optional[str]:
+        """Deprecated alias, retained for backward compatibility - now means
+        'the active LLM provider's API key', whichever provider that is.
+        Prefer `llm_enabled` (or `api_key` directly) in new code."""
+        return self.api_key
+
     def _get_system_prompt(self) -> str:
         """Get the system prompt for the AI agent."""
         return """You are an expert cybersecurity analyst specializing in incident response and threat hunting. Your role is to analyze security alerts from a SIEM system and provide:
@@ -191,41 +267,100 @@ FORMAT your response as structured sections:
 
 Each section should be specific and actionable based on the alert details provided."""
 
-    async def _call_groq_api(self, prompt: str) -> Optional[str]:
-        """Make async call to Groq API."""
-        if not self.groq_api_key:
+    async def _call_llm(self, system_prompt: str, user_prompt: str, want_json: bool = False) -> Optional[str]:
+        """Dispatch a chat completion to whichever provider is active. Every
+        provider has a different request/response shape, so each gets its
+        own small adapter; callers only ever see plain text back."""
+        if not self.api_key or not self.provider_cfg:
             return None
-            
+
         try:
-            async with aiohttp.ClientSession() as session:
-                headers = {
-                    'Content-Type': 'application/json',
-                    'Authorization': f'Bearer {self.groq_api_key}'
-                }
-                
-                payload = {
-                    "messages": [
-                        {"role": "system", "content": self._get_system_prompt()},
-                        {"role": "user", "content": prompt}
-                    ],
-                    "model": self.model,
-                    "stream": False,
-                    "temperature": 0.7,
-                    "max_tokens": 2048
-                }
-                
-                async with session.post(self.api_url, headers=headers, json=payload) as response:
-                    if response.status == 200:
-                        result = await response.json()
-                        return result['choices'][0]['message']['content']
-                    else:
-                        error_text = await response.text()
-                        logger.error(f"Groq API error {response.status}: {error_text}")
-                        return None
-                        
+            if self.provider_name in ("groq", "openai"):
+                return await self._call_openai_compatible(system_prompt, user_prompt, want_json)
+            if self.provider_name == "anthropic":
+                return await self._call_anthropic(system_prompt, user_prompt)
+            if self.provider_name == "gemini":
+                return await self._call_gemini(system_prompt, user_prompt)
         except Exception as e:
-            logger.error(f"Error calling Groq API: {e}")
+            logger.error(f"Error calling {self.provider_name} API: {e}")
             return None
+
+        logger.error(f"Unknown LLM provider: {self.provider_name}")
+        return None
+
+    async def _call_openai_compatible(self, system_prompt: str, user_prompt: str, want_json: bool) -> Optional[str]:
+        """Groq and OpenAI both implement the OpenAI chat completions schema."""
+        headers = {
+            'Content-Type': 'application/json',
+            'Authorization': f'Bearer {self.api_key}',
+        }
+        payload = {
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            "model": self.model,
+            "stream": False,
+            "temperature": 0.4,
+            "max_tokens": 2048,
+        }
+        if want_json:
+            payload["response_format"] = {"type": "json_object"}
+
+        async with aiohttp.ClientSession() as session:
+            async with session.post(self.api_url, headers=headers, json=payload, timeout=aiohttp.ClientTimeout(total=30)) as response:
+                if response.status != 200:
+                    logger.error(f"{self.provider_name} API error {response.status}: {await response.text()}")
+                    return None
+                result = await response.json()
+                return result['choices'][0]['message']['content']
+
+    async def _call_anthropic(self, system_prompt: str, user_prompt: str) -> Optional[str]:
+        """Anthropic's Messages API - system prompt is a top-level field, and
+        the key goes in x-api-key rather than an Authorization bearer token."""
+        headers = {
+            'Content-Type': 'application/json',
+            'x-api-key': self.api_key,
+            'anthropic-version': '2023-06-01',
+        }
+        payload = {
+            "model": self.model,
+            "max_tokens": 2048,
+            "temperature": 0.4,
+            "system": system_prompt,
+            "messages": [{"role": "user", "content": user_prompt}],
+        }
+        async with aiohttp.ClientSession() as session:
+            async with session.post(self.api_url, headers=headers, json=payload, timeout=aiohttp.ClientTimeout(total=30)) as response:
+                if response.status != 200:
+                    logger.error(f"anthropic API error {response.status}: {await response.text()}")
+                    return None
+                result = await response.json()
+                return result['content'][0]['text']
+
+    async def _call_gemini(self, system_prompt: str, user_prompt: str) -> Optional[str]:
+        """Google's Generative Language API - key travels as a query param,
+        not a header, and the endpoint is per-model rather than shared."""
+        url = f"{self.api_url}/{self.model}:generateContent?key={self.api_key}"
+        headers = {'Content-Type': 'application/json'}
+        payload = {
+            "system_instruction": {"parts": [{"text": system_prompt}]},
+            "contents": [{"parts": [{"text": user_prompt}]}],
+            "generationConfig": {"temperature": 0.4, "maxOutputTokens": 2048},
+        }
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, headers=headers, json=payload, timeout=aiohttp.ClientTimeout(total=30)) as response:
+                if response.status != 200:
+                    logger.error(f"gemini API error {response.status}: {await response.text()}")
+                    return None
+                result = await response.json()
+                return result['candidates'][0]['content']['parts'][0]['text']
+
+    async def _call_groq_api(self, prompt: str) -> Optional[str]:
+        """Back-compat entry point used by analyze_alert/convert_natural_language_query
+        below - despite the name, this now dispatches to whichever provider
+        is active, not just Groq."""
+        return await self._call_llm(self._get_system_prompt(), prompt)
 
     def _format_alert_for_analysis(self, alert: Dict[str, Any]) -> str:
         """Format alert data into a comprehensive prompt for AI analysis."""
@@ -288,7 +423,7 @@ Please analyze this security alert and provide your expert assessment with speci
             if ai_response:
                 analysis = {
                     'alert_id': alert_id,
-                    'analysis_timestamp': datetime.utcnow().isoformat(),
+                    'analysis_timestamp': utcnow().isoformat(),
                     'ai_model': self.model,
                     'recommendations': ai_response,
                     'confidence': 'high',  # Could implement confidence scoring
@@ -331,7 +466,7 @@ Please analyze this security alert and provide your expert assessment with speci
             # Store the analysis
             self.opensearch.index(
                 index="ai_analyses",
-                id=f"analysis_{alert_id}_{int(datetime.utcnow().timestamp())}",
+                id=f"analysis_{alert_id}_{int(utcnow().timestamp())}",
                 body=analysis
             )
             
@@ -349,7 +484,7 @@ Please analyze this security alert and provide your expert assessment with speci
                             {
                                 "range": {
                                     "timestamp": {
-                                        "gte": (datetime.utcnow() - timedelta(hours=hours)).isoformat()
+                                        "gte": (utcnow() - timedelta(hours=hours)).isoformat()
                                     }
                                 }
                             },
@@ -434,7 +569,7 @@ Please analyze this security alert and provide your expert assessment with speci
                 "query": {
                     "range": {
                         "analysis_timestamp": {
-                            "gte": (datetime.utcnow() - timedelta(hours=24)).isoformat()
+                            "gte": (utcnow() - timedelta(hours=24)).isoformat()
                         }
                     }
                 }
@@ -445,8 +580,9 @@ Please analyze this security alert and provide your expert assessment with speci
             return {
                 'total_analyses': total_analyses,
                 'recent_analyses_24h': recent_analyses,
+                'provider': self.provider_name,
                 'ai_model': self.model,
-                'status': 'active' if self.groq_api_key else 'disabled'
+                'status': 'active' if self.llm_enabled else 'disabled'
             }
             
         except Exception as e:
@@ -469,10 +605,10 @@ Please analyze this security alert and provide your expert assessment with speci
         Returns:
             Dict with query string and explanation
         """
-        if not self.groq_api_key:
+        if not self.llm_enabled:
             return {
                 "success": False,
-                "error": "AI agent is not available (Groq API key not configured)",
+                "error": "AI agent is not available (no LLM provider API key configured - set GROQ_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY, or GEMINI_API_KEY)",
                 "query": nl_query
             }
         
@@ -623,7 +759,7 @@ Only respond with valid JSON, no additional text."""
                 return cached
 
         rca = None
-        if self.groq_api_key:
+        if self.llm_enabled:
             rca = await self._generate_llm_rca(incident)
             if rca is None:
                 logger.warning(f"LLM RCA failed for {incident_id}, falling back to template mode")
@@ -707,7 +843,7 @@ Only respond with valid JSON, no additional text."""
             "incident_id": incident.get("incident_id", "unknown"),
             "mode": "template",
             "ai_model": "template-fallback-v1",
-            "generated_at": datetime.utcnow().isoformat() + "Z",
+            "generated_at": utcnow().isoformat() + "Z",
             "threat_summary": f"[{severity.upper()}] {summary}",
             "root_cause_analysis": root_cause,
             "evidence": evidence,
@@ -738,7 +874,8 @@ TIMELINE:
 """
 
     async def _generate_llm_rca(self, incident: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """Ask the Groq LLM for a structured RCA. Returns None on any failure so the caller can fall back."""
+        """Ask the active LLM provider for a structured RCA. Returns None on
+        any failure so the caller can fall back to template mode."""
         system_prompt = (
             "You are an expert SOC analyst performing root cause analysis on a correlated security incident. "
             "Respond with ONLY a valid JSON object (no markdown fences, no commentary) with exactly these keys: "
@@ -751,28 +888,9 @@ TIMELINE:
         prompt = self._format_incident_for_llm(incident)
 
         try:
-            async with aiohttp.ClientSession() as session:
-                headers = {
-                    'Content-Type': 'application/json',
-                    'Authorization': f'Bearer {self.groq_api_key}'
-                }
-                payload = {
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": prompt},
-                    ],
-                    "model": self.model,
-                    "stream": False,
-                    "temperature": 0.4,
-                    "max_tokens": 2048,
-                    "response_format": {"type": "json_object"},
-                }
-                async with session.post(self.api_url, headers=headers, json=payload) as response:
-                    if response.status != 200:
-                        logger.error(f"Groq API error {response.status}: {await response.text()}")
-                        return None
-                    result = await response.json()
-                    content = result['choices'][0]['message']['content']
+            content = await self._call_llm(system_prompt, prompt, want_json=True)
+            if not content:
+                return None
 
             parsed = json.loads(_extract_json(content))
             rca = {key: parsed.get(key) for key in self.RCA_SECTIONS}
@@ -782,8 +900,9 @@ TIMELINE:
             rca.update({
                 "incident_id": incident.get("incident_id", "unknown"),
                 "mode": "llm",
+                "provider": self.provider_name,
                 "ai_model": self.model,
-                "generated_at": datetime.utcnow().isoformat() + "Z",
+                "generated_at": utcnow().isoformat() + "Z",
             })
             return rca
         except Exception as e:
@@ -838,8 +957,8 @@ async def main():
     # Initialize AI agent
     agent = AISecurityAgent(opensearch_client)
     
-    if not agent.groq_api_key:
-        logger.error("GROQ_API_KEY environment variable not set. Exiting.")
+    if not agent.llm_enabled:
+        logger.error("No LLM provider API key set (GROQ_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY, or GEMINI_API_KEY). Exiting.")
         return
     
     # Run continuous analysis loop

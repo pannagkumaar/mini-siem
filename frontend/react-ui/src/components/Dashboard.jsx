@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react'
-import { getStats, getSummary } from '../api'
-import { Panel, SeverityTag, TickMeter, ConsoleSpinner, SEVERITY_COLOR } from './ui'
+import { getStats, getSummary, getTimeseries, getIncidents } from '../api'
+import {
+  Panel, SeverityTag, RiskBadge, TickMeter, ConsoleSpinner, SEVERITY_COLOR,
+  SeverityTrendChart, toTrendSeries, FilterChip,
+} from './ui'
 
 function StatCell({ label, value, caption }) {
   return (
@@ -58,6 +61,11 @@ export function Dashboard() {
     logs_total: 0,
     alerts_total: 0,
   })
+  const [timeseries, setTimeseries] = useState({ points: [], hours: 24 })
+  const [trendMetric, setTrendMetric] = useState('logs')
+  const [trendHours, setTrendHours] = useState(24)
+  const [topRiskIncident, setTopRiskIncident] = useState(null)
+  const [avgOpenRisk, setAvgOpenRisk] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [refreshInterval, setRefreshInterval] = useState(5000)
@@ -65,12 +73,25 @@ export function Dashboard() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [statsResponse, summaryResponse] = await Promise.all([
+        const [statsResponse, summaryResponse, incidentsResponse] = await Promise.all([
           getStats(),
           getSummary(),
+          getIncidents(24, 'risk'),
         ])
         setStats(statsResponse.data)
         setSummary(summaryResponse.data)
+
+        const incidents = incidentsResponse.data.incidents || []
+        const openWithRisk = incidents.filter(
+          (i) => i.status === 'open' && typeof i.risk_score === 'number'
+        )
+        setTopRiskIncident(openWithRisk[0] || null)
+        setAvgOpenRisk(
+          openWithRisk.length > 0
+            ? Math.round(openWithRisk.reduce((sum, i) => sum + i.risk_score, 0) / openWithRisk.length)
+            : null
+        )
+
         setError(null)
       } catch (err) {
         setError(err.message || 'Failed to fetch dashboard data')
@@ -85,6 +106,22 @@ export function Dashboard() {
 
     return () => clearInterval(interval)
   }, [refreshInterval])
+
+  useEffect(() => {
+    const fetchTrend = async () => {
+      try {
+        const response = await getTimeseries(trendHours)
+        setTimeseries(response.data)
+      } catch (err) {
+        console.error('Error fetching timeseries:', err)
+      }
+    }
+
+    fetchTrend()
+    if (refreshInterval <= 0) return undefined
+    const interval = setInterval(fetchTrend, Math.max(refreshInterval, 15000))
+    return () => clearInterval(interval)
+  }, [trendHours, refreshInterval])
 
   if (loading && !stats.logs) {
     return <ConsoleSpinner label="Loading overview" />
@@ -120,6 +157,58 @@ export function Dashboard() {
         {stats.detection_engine && (
           <StatCell label="Rules Loaded" value={stats.detection_engine.total_rules} caption="active" />
         )}
+        {avgOpenRisk !== null && (
+          <StatCell label="Avg Open Risk" value={avgOpenRisk} caption="risk score" />
+        )}
+      </Panel>
+
+      {/* Highest-risk open incident */}
+      {topRiskIncident && (
+        <Panel className="p-5">
+          <div className="flex items-center justify-between mb-3">
+            <div className="eyebrow">Highest Open Risk</div>
+            <RiskBadge
+              score={topRiskIncident.risk_score}
+              band={topRiskIncident.risk_band}
+              factors={topRiskIncident.risk_factors}
+            />
+          </div>
+          <div className="flex items-center gap-3 mb-1">
+            <SeverityTag severity={topRiskIncident.severity} />
+            <h3 className="text-[15px] font-medium text-bone">{topRiskIncident.pattern_name || 'Incident'}</h3>
+          </div>
+          <p className="text-sm text-dim">{topRiskIncident.description}</p>
+        </Panel>
+      )}
+
+      {/* Trend chart */}
+      <Panel className="p-5">
+        <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+          <div className="eyebrow">
+            {trendMetric === 'logs' ? 'Log Volume' : 'Alert Volume'} Over Time
+            <span className="text-faint normal-case tracking-normal"> &middot; {timeseries.interval || '1h'} buckets</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="flex gap-1">
+              <FilterChip active={trendMetric === 'logs'} onClick={() => setTrendMetric('logs')}>
+                Logs
+              </FilterChip>
+              <FilterChip active={trendMetric === 'alerts'} onClick={() => setTrendMetric('alerts')} color={SEVERITY_COLOR.high}>
+                Alerts
+              </FilterChip>
+            </div>
+            <select
+              value={trendHours}
+              onChange={(e) => setTrendHours(parseInt(e.target.value))}
+              className="field mono text-xs px-2 py-1.5"
+            >
+              <option value="6">6h</option>
+              <option value="24">24h</option>
+              <option value="168">7d</option>
+            </select>
+          </div>
+        </div>
+        <SeverityTrendChart data={toTrendSeries(timeseries.points, trendMetric, trendHours)} />
       </Panel>
 
       {/* Severity Distribution */}

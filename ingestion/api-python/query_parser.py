@@ -12,7 +12,7 @@ Examples:
 """
 
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Any, Tuple
 
 
@@ -274,7 +274,7 @@ class QueryParser:
     
     def _handle_time_condition(self, value: str) -> Dict[str, Any]:
         """Handle relative time expressions like '1h ago', '2d ago'"""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
         
         # Parse relative time (e.g., "1h ago", "2d ago")
         match = re.match(r'(\d+)([smhd])\s*(?:ago)?', value, re.IGNORECASE)

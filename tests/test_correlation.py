@@ -37,12 +37,26 @@ def test_incident_has_required_fields(detection_engine, correlation_engine, repl
         "incident_id", "title", "severity", "status", "related_alerts",
         "timeline", "affected_assets", "suspected_attack_chain",
         "mitre_techniques", "recommended_actions",
+        "risk_score", "risk_band", "risk_factors",
     ]
     for incident in incidents:
         for field in required_fields:
             assert field in incident, f"incident missing field {field}"
         assert incident["status"] == "open"
         assert incident["severity"] in {"low", "medium", "high", "critical"}
+        assert 0 <= incident["risk_score"] <= 100
+        assert incident["risk_band"] in {"low", "medium", "high", "critical"}
+
+
+def test_full_attack_chain_incident_has_high_risk_score(detection_engine, correlation_engine, replay_module):
+    ctx = replay_module.ScenarioContext()
+    logs = replay_module.scenario_full_attack_chain(ctx)
+    alerts = _alerts_for(detection_engine, logs)
+    incidents = correlation_engine.build_incidents(alerts)
+
+    flagship = next(i for i in incidents if i["pattern_id"] == "CORR-006")
+    assert flagship["risk_score"] >= 90
+    assert flagship["risk_band"] == "critical"
 
 
 def test_incident_ids_are_deterministic(detection_engine, correlation_engine, replay_module):

@@ -9,7 +9,7 @@ report. No paid API key required.
 ```bash
 git clone <this repo>
 cd mini-siem
-cp .env.example .env   # optional: add GROQ_API_KEY for LLM-mode RCA
+cp .env.example .env   # optional: add an LLM provider key for LLM-mode RCA
 ```
 
 ## The 90 seconds
@@ -53,14 +53,16 @@ Execution`) each tagged with severity and MITRE ATT&CK technique IDs.
 Click **Incidents**. The correlation engine has grouped the individual
 alerts above into a single incident - e.g. `CORR-006: Full Attack Chain:
 Initial Access to Exfiltration` - with a timeline, affected hosts/users,
-and a suspected attack chain string.
+a suspected attack chain string, and a risk score badge (0-100, hover for
+the factor breakdown - see [docs/RISK_SCORING.md](docs/RISK_SCORING.md)).
 
 **6. Generate the AI RCA (1:10 - 1:20)**
 
-Expand the incident and click **Generate AI RCA**. If `GROQ_API_KEY` is set
-in `.env`, this calls Groq's Llama 3.3 70B for a natural-language root
-cause analysis. If not, you instantly get a deterministic template RCA -
-still a full threat summary, root cause, evidence, MITRE mapping,
+Expand the incident and click **Generate AI RCA**. If a provider key
+(`GROQ_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, or `GEMINI_API_KEY`)
+is set in `.env`, this calls that LLM for a natural-language root cause
+analysis. If not, you instantly get a deterministic template RCA - still a
+full threat summary, root cause, evidence, MITRE mapping,
 containment/investigation/remediation steps, and false-positive notes.
 
 **7. Export the incident report (1:20 - 1:30)**
@@ -90,3 +92,11 @@ python scripts/replay_attack.py --scenario data_exfiltration_pattern
 
 See [docs/ATTACK_REPLAY.md](docs/ATTACK_REPLAY.md) for the full scenario
 list and which rules/incidents each one is designed to trigger.
+
+## Beyond the 90 seconds
+
+- **Respond to an incident** - expand it and use the Response Actions panel
+  (`block_ip` / `disable_user` / `isolate_host`). This is simulated only -
+  it records the action and never touches a real system.
+- **Metrics** - `curl http://localhost:8000/metrics` for Prometheus-format
+  ingestion/detection/incident counters.

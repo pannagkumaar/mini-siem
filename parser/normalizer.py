@@ -15,7 +15,7 @@ Converts logs from various sources into the standardized SIEM schema:
 """
 
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Any, Optional
 from enum import Enum
 
@@ -82,7 +82,7 @@ def normalize_timestamp(timestamp_str: Optional[str]) -> str:
         ISO8601 formatted timestamp string
     """
     if not timestamp_str:
-        return datetime.utcnow().isoformat() + "Z"
+        return datetime.now(timezone.utc).replace(tzinfo=None).isoformat() + "Z"
 
     try:
         # Try ISO8601 format first
@@ -105,10 +105,10 @@ def normalize_timestamp(timestamp_str: Optional[str]) -> str:
                 continue
 
         # If parsing fails, return current time
-        return datetime.utcnow().isoformat() + "Z"
+        return datetime.now(timezone.utc).replace(tzinfo=None).isoformat() + "Z"
 
     except Exception:
-        return datetime.utcnow().isoformat() + "Z"
+        return datetime.now(timezone.utc).replace(tzinfo=None).isoformat() + "Z"
 
 
 def extract_ip_from_string(text: str) -> Optional[str]:

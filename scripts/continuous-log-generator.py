@@ -10,7 +10,7 @@ import requests
 import json
 import time
 import random
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import sys
 
 # Color codes for terminal output
@@ -181,7 +181,7 @@ def generate_log():
     ]
     ip = ".".join(ip_parts)
     
-    timestamp = datetime.utcnow().isoformat() + "Z"
+    timestamp = datetime.now(timezone.utc).replace(tzinfo=None).isoformat() + "Z"
     
     # Enhanced metadata based on event type
     raw_data = {

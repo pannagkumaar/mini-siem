@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react'
 import {
   getIncidents, startInvestigation, resolveIncident, updateIncidentStatus,
-  generateIncidentRCA, getIncidentRCA,
+  generateIncidentRCA, getIncidentRCA, respondToIncident, getIncidentResponses,
 } from '../api'
 import {
-  Panel, SeverityTag, StatusTag, NeutralTag, FilterChip, ConsoleSpinner, Chevron, PulseDot,
+  Panel, SeverityTag, StatusTag, RiskBadge, NeutralTag, FilterChip, ConsoleSpinner, Chevron, PulseDot,
   SEVERITY_COLOR, STATUS_COLOR,
 } from './ui'
 
@@ -15,6 +15,7 @@ export function IncidentsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [hours, setHours] = useState(24)
+  const [sortBy, setSortBy] = useState('timestamp')
   const [expandedId, setExpandedId] = useState(null)
   const [filterStatus, setFilterStatus] = useState(null)
   const [actionLoading, setActionLoading] = useState(null)
@@ -24,12 +25,15 @@ export function IncidentsPage() {
   const [resolveMode, setResolveMode] = useState(null)
   const [rcaByIncident, setRcaByIncident] = useState({})
   const [rcaLoading, setRcaLoading] = useState(new Set())
+  const [responsesByIncident, setResponsesByIncident] = useState({})
+  const [respondForm, setRespondForm] = useState({}) // { [incidentId]: { action, target } }
+  const [respondLoading, setRespondLoading] = useState(null)
 
   useEffect(() => {
     const fetchIncidents = async () => {
       try {
         setLoading(true)
-        const response = await getIncidents(hours)
+        const response = await getIncidents(hours, sortBy)
         setIncidents(response.data.incidents || [])
         setError(null)
       } catch (err) {
@@ -44,7 +48,7 @@ export function IncidentsPage() {
     const interval = setInterval(fetchIncidents, 10000)
 
     return () => clearInterval(interval)
-  }, [hours])
+  }, [hours, sortBy])
 
   const filteredIncidents = filterStatus
     ? incidents.filter(i => i.status?.toLowerCase() === filterStatus.toLowerCase())
@@ -131,6 +135,49 @@ export function IncidentsPage() {
       } catch (err) {
         // No RCA yet - that's fine, user can generate one
       }
+    }
+
+    if (nextExpanded !== null && incidentId && !(incidentId in responsesByIncident)) {
+      try {
+        const response = await getIncidentResponses(incidentId)
+        setResponsesByIncident(prev => ({ ...prev, [incidentId]: response.data.responses || [] }))
+      } catch (err) {
+        // No response history yet - that's fine
+      }
+    }
+  }
+
+  const defaultRespondTarget = (incident, action) => {
+    if (action === 'block_ip') return (incident.ips && incident.ips[0]) || ''
+    if (action === 'disable_user') return (incident.users && incident.users[0]) || ''
+    return (incident.hosts && incident.hosts[0]) || ''
+  }
+
+  const handleRespond = async (incident) => {
+    const incidentId = incident.incident_id || incident._id
+    const form = respondForm[incidentId] || {}
+    const action = form.action || 'block_ip'
+    const target = (form.target ?? defaultRespondTarget(incident, action)).trim()
+    if (!target) {
+      setError('A target is required for the response action')
+      setTimeout(() => setError(null), 3000)
+      return
+    }
+
+    setRespondLoading(incidentId)
+    try {
+      const response = await respondToIncident(incidentId, action, target)
+      setResponsesByIncident(prev => ({
+        ...prev,
+        [incidentId]: [response.data.action, ...(prev[incidentId] || [])],
+      }))
+      setSuccessMessage(`Simulated ${action} on ${target}`)
+      setTimeout(() => setSuccessMessage(null), 3000)
+    } catch (err) {
+      setError(err.message || 'Failed to record response action')
+      setTimeout(() => setError(null), 3000)
+    } finally {
+      setRespondLoading(null)
     }
   }
 
@@ -236,12 +283,22 @@ export function IncidentsPage() {
           <h1 className="text-xl font-semibold text-bone tracking-tight">Incidents</h1>
           <p className="eyebrow mt-1">Correlated security events</p>
         </div>
-        <select value={hours} onChange={(e) => setHours(parseInt(e.target.value))} className="field mono text-xs px-3 py-2">
-          <option value="1">Last 1 hour</option>
-          <option value="6">Last 6 hours</option>
-          <option value="24">Last 24 hours</option>
-          <option value="168">Last 7 days</option>
-        </select>
+        <div className="flex items-center gap-2">
+          <div className="flex gap-1">
+            <FilterChip active={sortBy === 'timestamp'} onClick={() => setSortBy('timestamp')}>
+              Newest
+            </FilterChip>
+            <FilterChip active={sortBy === 'risk'} onClick={() => setSortBy('risk')} color={SEVERITY_COLOR.critical}>
+              Highest risk
+            </FilterChip>
+          </div>
+          <select value={hours} onChange={(e) => setHours(parseInt(e.target.value))} className="field mono text-xs px-3 py-2">
+            <option value="1">Last 1 hour</option>
+            <option value="6">Last 6 hours</option>
+            <option value="24">Last 24 hours</option>
+            <option value="168">Last 7 days</option>
+          </select>
+        </div>
       </div>
 
       {error && (
@@ -292,6 +349,7 @@ export function IncidentsPage() {
                     <div className="flex items-center gap-3 mb-2">
                       <SeverityTag severity={incident.severity} />
                       <StatusTag status={incident.status} />
+                      <RiskBadge score={incident.risk_score} band={incident.risk_band} factors={incident.risk_factors} />
                       <span className="mono text-[11px] text-faint">{new Date(incident.timestamp).toLocaleString()}</span>
                     </div>
                     <h3 className="text-[15px] font-medium text-bone mb-1">{incident.pattern_name || 'Incident'}</h3>
@@ -348,6 +406,22 @@ export function IncidentsPage() {
                         </div>
                       </div>
                     </div>
+
+                    {incident.risk_factors && incident.risk_factors.length > 0 && (
+                      <div>
+                        <div className="eyebrow mb-2">
+                          Risk Score &mdash; {incident.risk_score} ({incident.risk_band})
+                        </div>
+                        <div className="space-y-1 border hairline rounded p-3">
+                          {incident.risk_factors.map((factor, i) => (
+                            <div key={i} className="flex justify-between text-xs mono">
+                              <span className="text-dim">{factor.label}</span>
+                              <span className="text-bone">+{factor.points}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
                     {incident.suspected_attack_chain && (
                       <div>
@@ -450,6 +524,62 @@ export function IncidentsPage() {
                         </div>
                       </div>
                     )}
+
+                    <div>
+                      <div className="eyebrow mb-2">
+                        Response Actions <span className="text-faint normal-case">(simulated)</span>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 mb-3">
+                        <select
+                          value={respondForm[incident.incident_id || incident._id]?.action || 'block_ip'}
+                          onChange={(e) => {
+                            const id = incident.incident_id || incident._id
+                            const action = e.target.value
+                            setRespondForm(prev => ({ ...prev, [id]: { ...prev[id], action } }))
+                          }}
+                          className="field mono text-xs px-2 py-1.5"
+                        >
+                          <option value="block_ip">Block IP</option>
+                          <option value="disable_user">Disable User</option>
+                          <option value="isolate_host">Isolate Host</option>
+                        </select>
+                        <input
+                          type="text"
+                          value={
+                            respondForm[incident.incident_id || incident._id]?.target
+                            ?? defaultRespondTarget(incident, respondForm[incident.incident_id || incident._id]?.action || 'block_ip')
+                          }
+                          onChange={(e) => {
+                            const id = incident.incident_id || incident._id
+                            const target = e.target.value
+                            setRespondForm(prev => ({ ...prev, [id]: { ...prev[id], target } }))
+                          }}
+                          className="field text-xs px-2 py-1.5 flex-1 min-w-[140px]"
+                          placeholder="target (ip / user / host)"
+                        />
+                        <button
+                          onClick={() => handleRespond(incident)}
+                          disabled={respondLoading === (incident.incident_id || incident._id)}
+                          className="btn is-active"
+                        >
+                          {respondLoading === (incident.incident_id || incident._id) ? 'Executing…' : 'Execute'}
+                        </button>
+                      </div>
+                      {(responsesByIncident[incident.incident_id || incident._id] || []).length > 0 && (
+                        <div className="space-y-1.5">
+                          {(responsesByIncident[incident.incident_id || incident._id] || []).map((r, i) => (
+                            <div key={i} className="flex items-center justify-between text-xs mono border hairline rounded px-3 py-2">
+                              <span className="text-dim">
+                                {r.action} <span className="text-faint">&rarr;</span> {r.target}
+                              </span>
+                              <span className="text-faint">
+                                {r.executed_at ? new Date(r.executed_at).toLocaleString() : ''}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
 
                     <div>
                       <div className="eyebrow mb-2">AI Root Cause Analysis</div>

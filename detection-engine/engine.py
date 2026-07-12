@@ -24,7 +24,7 @@ import json
 import re
 import yaml
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Any, Optional, Callable, Union
 from pathlib import Path
 from collections import defaultdict
@@ -59,7 +59,13 @@ if not logger.handlers:
 
 # Operators recognized inside a condition leaf, e.g. {"contains": "powershell"}
 _OPERATORS = {"contains", "regex", "in", "not", "gt", "gte", "lt", "lte", "exists"}
-_MISSING = object()
+
+
+def utcnow() -> datetime:
+    """Naive UTC datetime, matching the (deprecated) utcnow()
+    return shape so every existing `.isoformat() + "Z"` call site keeps
+    producing correct ISO8601 strings without using the deprecated API."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 def get_nested_value(obj: Any, dotted_path: str) -> Any:
@@ -207,7 +213,7 @@ class DetectionRule:
     ) -> Dict[str, Any]:
         """Generate an alert document when the rule matches (a log, or a group of logs)."""
         alert = {
-            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "timestamp": utcnow().isoformat() + "Z",
             "rule_id": self.id,
             "rule_name": self.name,
             "rule_description": self.description,
@@ -339,7 +345,7 @@ class DetectionEngine:
         group from re-alerting every detection cycle.
         """
         alerts = []
-        now = datetime.utcnow()
+        now = utcnow()
 
         for rule in self.rules:
             if not rule.threshold:
@@ -420,7 +426,7 @@ class DetectionEngine:
             return
 
         try:
-            now = datetime.utcnow()
+            now = utcnow()
             lookback_start = (now - timedelta(minutes=lookback_minutes)).isoformat() + "Z"
             # Use a cursor so the same log isn't re-evaluated (and re-alerted)
             # on every detection cycle when the lookback window overlaps.

@@ -1,4 +1,7 @@
 import React from 'react'
+import {
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+} from 'recharts'
 
 export const SEVERITY_COLOR = {
   critical: '#ff4d3d',
@@ -43,6 +46,28 @@ export function SeverityTag({ severity }) {
 export function StatusTag({ status }) {
   const key = (status || 'unknown').toLowerCase()
   return <ColorTag label={key} color={STATUS_COLOR[key] || NEUTRAL} />
+}
+
+/** Shows an incident's computed risk score (0-100), colored by risk band
+ * using the same severity palette. Hover reveals the factor breakdown from
+ * correlation-engine/risk.py so the score is never opaque. */
+export function RiskBadge({ score, band, factors }) {
+  if (score === undefined || score === null) return null
+  const key = (band || 'low').toLowerCase()
+  const color = SEVERITY_COLOR[key] || NEUTRAL
+  const title = factors && factors.length
+    ? factors.map((f) => `${f.label}: +${f.points}`).join('\n')
+    : undefined
+  return (
+    <span
+      className="tag"
+      style={{ color, borderColor: hexToRgba(color, 0.45), background: hexToRgba(color, 0.09) }}
+      title={title}
+    >
+      <span className="tag-dot" style={{ background: color }} />
+      risk {score}
+    </span>
+  )
 }
 
 /** Plain grayscale tag for non-severity metadata (source, event type, etc.) -
@@ -131,5 +156,109 @@ export function Chevron({ open }) {
     >
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
     </svg>
+  )
+}
+
+const SEVERITY_ORDER = ['low', 'medium', 'high', 'critical']
+
+function formatTickTime(iso, hours) {
+  const d = new Date(iso)
+  if (hours <= 24) {
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
+  }
+  // The dashboard's longest range (7d) still buckets in sub-day intervals
+  // (6h), so a date-only label would repeat several times per day - always
+  // pair date with time here so every tick is distinct.
+  const date = d.toLocaleDateString([], { month: 'short', day: 'numeric' })
+  const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
+  return `${date} ${time}`
+}
+
+/** Transforms the raw /timeseries API response into a recharts-friendly
+ * array, one row per bucket, with a value per severity for the given
+ * metric ("logs" or "alerts"). */
+export function toTrendSeries(points, metric, hours) {
+  return (points || []).map((p) => {
+    const bySeverity = p[metric] || {}
+    const row = { time: p.time, label: formatTickTime(p.time, hours) }
+    for (const sev of SEVERITY_ORDER) row[sev] = bySeverity[sev] || 0
+    return row
+  })
+}
+
+function TrendTooltip({ active, payload, label }) {
+  if (!active || !payload || payload.length === 0) return null
+  const total = payload.reduce((sum, p) => sum + (p.value || 0), 0)
+  return (
+    <div className="panel px-3 py-2">
+      <div className="eyebrow mb-1.5">{label}</div>
+      {payload.slice().reverse().map((p) => (
+        p.value > 0 && (
+          <div key={p.dataKey} className="flex items-center gap-2 mono text-xs mb-0.5">
+            <span className="w-2 h-2 flex-none" style={{ background: p.color }} />
+            <span className="text-dim capitalize">{p.dataKey}</span>
+            <span className="text-bone ml-4 tabular-nums">{p.value}</span>
+          </div>
+        )
+      ))}
+      <div className="mono text-xs text-faint mt-1 pt-1 border-t hairline tabular-nums">total {total}</div>
+    </div>
+  )
+}
+
+/** The flagship visualization: a stacked area chart of event volume over
+ * time, colored by severity - the same signal-color discipline used
+ * everywhere else, applied to a real time series instead of a snapshot. */
+export function SeverityTrendChart({ data, height = 240 }) {
+  const hasData = data.some((row) => SEVERITY_ORDER.some((sev) => row[sev] > 0))
+
+  if (!hasData) {
+    return (
+      <div className="flex items-center justify-center text-faint text-xs" style={{ height }}>
+        No data in this window
+      </div>
+    )
+  }
+
+  return (
+    <ResponsiveContainer width="100%" height={height}>
+      <AreaChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+        <defs>
+          {SEVERITY_ORDER.map((sev) => (
+            <linearGradient key={sev} id={`trend-fill-${sev}`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor={SEVERITY_COLOR[sev]} stopOpacity={0.5} />
+              <stop offset="95%" stopColor={SEVERITY_COLOR[sev]} stopOpacity={0.02} />
+            </linearGradient>
+          ))}
+        </defs>
+        <CartesianGrid strokeDasharray="2 4" stroke="var(--line)" vertical={false} />
+        <XAxis
+          dataKey="label"
+          tick={{ fill: 'var(--faint)', fontSize: 11, fontFamily: 'IBM Plex Mono' }}
+          axisLine={{ stroke: 'var(--line)' }}
+          tickLine={false}
+          minTickGap={32}
+        />
+        <YAxis
+          tick={{ fill: 'var(--faint)', fontSize: 11, fontFamily: 'IBM Plex Mono' }}
+          axisLine={false}
+          tickLine={false}
+          width={44}
+          allowDecimals={false}
+        />
+        <Tooltip content={<TrendTooltip />} cursor={{ stroke: 'var(--line-2)', strokeWidth: 1 }} />
+        {SEVERITY_ORDER.map((sev) => (
+          <Area
+            key={sev}
+            type="monotone"
+            dataKey={sev}
+            stackId="severity"
+            stroke={SEVERITY_COLOR[sev]}
+            strokeWidth={1.25}
+            fill={`url(#trend-fill-${sev})`}
+          />
+        ))}
+      </AreaChart>
+    </ResponsiveContainer>
   )
 }

@@ -2,7 +2,7 @@ import requests
 import time
 
 OPENSEARCH_HOST = "http://localhost:9200"
-INDICES = ["logs", "alerts", "incidents", "ai_analyses"]
+INDICES = ["logs", "alerts", "incidents", "ai_analyses", "response_actions"]
 
 # A simple mapping for the logs index to ensure timestamp is handled correctly
 LOGS_MAPPING = {
@@ -35,6 +35,40 @@ AI_ANALYSES_MAPPING = {
             }
         },
         "created_at": {"type": "date"}
+    }
+}
+
+# Explicit mapping so risk_score is numeric/sortable (dynamic mapping would
+# otherwise infer it correctly too, but this guarantees it and documents the
+# shape incidents are written in - see correlation-engine/risk.py).
+INCIDENTS_MAPPING = {
+    "properties": {
+        "timestamp": {"type": "date"},
+        "first_seen": {"type": "date"},
+        "last_seen": {"type": "date"},
+        "incident_id": {"type": "keyword"},
+        "pattern_id": {"type": "keyword"},
+        "severity": {"type": "keyword"},
+        "status": {"type": "keyword"},
+        "risk_score": {"type": "integer"},
+        "risk_band": {"type": "keyword"},
+        "host": {"type": "keyword"},
+        "user": {"type": "keyword"},
+        "ip": {"type": "keyword"},
+    }
+}
+
+# Simulated SOAR response actions (block_ip/disable_user/isolate_host) - see
+# POST /incidents/{id}/respond. Never touches a real system; this is purely
+# a record of what an analyst triggered.
+RESPONSE_ACTIONS_MAPPING = {
+    "properties": {
+        "incident_id": {"type": "keyword"},
+        "action": {"type": "keyword"},
+        "target": {"type": "keyword"},
+        "status": {"type": "keyword"},
+        "executed_at": {"type": "date"},
+        "executed_by": {"type": "keyword"},
     }
 }
 
@@ -89,6 +123,10 @@ def main():
             create_index(index, LOGS_MAPPING)
         elif index == "ai_analyses":
             create_index(index, AI_ANALYSES_MAPPING)
+        elif index == "incidents":
+            create_index(index, INCIDENTS_MAPPING)
+        elif index == "response_actions":
+            create_index(index, RESPONSE_ACTIONS_MAPPING)
         else:
             create_index(index)
     print("Database initialization complete.")

@@ -14,13 +14,26 @@ Patterns come from two places:
 
 import hashlib
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 from collections import defaultdict
 
 import yaml
 from opensearchpy import OpenSearch
+
+try:
+    # Works when correlator.py is run directly (python correlator.py) - its
+    # own directory is on sys.path[0].
+    from risk import compute_risk
+except ImportError:
+    # Works when correlator.py is loaded as a module from elsewhere (the
+    # ingestion API's importlib-based load, or the test suite's
+    # spec_from_file_location load) - neither puts this directory on
+    # sys.path automatically, so add it explicitly and retry.
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from risk import compute_risk
 
 
 class ColoredFormatter(logging.Formatter):
@@ -52,14 +65,21 @@ if not logger.handlers:
     logger.setLevel(logging.INFO)
 
 
+def utcnow() -> datetime:
+    """Naive UTC datetime, matching the (deprecated) datetime.utcnow()
+    return shape so every existing `.isoformat() + "Z"` call site keeps
+    producing correct ISO8601 strings without using the deprecated API."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
 def _parse_ts(ts: str) -> datetime:
     """Parse an ISO8601 timestamp (with or without trailing Z)."""
     if not ts:
-        return datetime.utcnow()
+        return utcnow()
     try:
         return datetime.fromisoformat(ts.replace("Z", "+00:00")).replace(tzinfo=None)
     except ValueError:
-        return datetime.utcnow()
+        return utcnow()
 
 
 class CorrelationPattern:
@@ -348,7 +368,7 @@ class CorrelationEngine:
             return
 
         try:
-            now = datetime.utcnow()
+            now = utcnow()
             start_time = (now - timedelta(minutes=lookback_minutes)).isoformat() + "Z"
 
             query = {
@@ -442,7 +462,7 @@ class CorrelationEngine:
 
         # Deterministic ID: same pattern + entity + time span => same incident.
         id_material = f"{pattern.id}|{pattern.group_by}:{entity_value}|{span_start}|{span_end}"
-        incident_id = f"INC-{hashlib.md5(id_material.encode()).hexdigest()[:10].upper()}"
+        incident_id = f"INC-{hashlib.sha256(id_material.encode()).hexdigest()[:10].upper()}"
 
         hosts = sorted({a.get("host") for a in matched_alerts if a.get("host")})
         users = sorted({a.get("user") for a in matched_alerts if a.get("user")})
@@ -481,6 +501,11 @@ class CorrelationEngine:
             [fp for a in matched_alerts for fp in (a.get("false_positives") or [])]
         ))[:10]
 
+        risk = compute_risk(
+            {"severity": pattern.severity, "users": users, "mitre_techniques": mitre_techniques},
+            matched_alerts,
+        )
+
         return {
             "incident_id": incident_id,
             "title": pattern.name,
@@ -508,6 +533,9 @@ class CorrelationEngine:
             "mitre_techniques": mitre_techniques,
             "recommended_actions": remediation_actions,
             "false_positives": false_positives,
+            "risk_score": risk["risk_score"],
+            "risk_band": risk["risk_band"],
+            "risk_factors": risk["risk_factors"],
         }
 
     def get_incidents(self, hours: int = 24) -> List[Dict[str, Any]]:
@@ -525,7 +553,7 @@ class CorrelationEngine:
             return []
 
         try:
-            now = datetime.utcnow()
+            now = utcnow()
             start_time = (now - timedelta(hours=hours)).isoformat() + "Z"
 
             query = {

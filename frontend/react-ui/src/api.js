@@ -1,11 +1,13 @@
 import axios from 'axios'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const API_KEY = import.meta.env.VITE_API_KEY
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
+    ...(API_KEY ? { 'X-API-Key': API_KEY } : {}),
   },
 })
 
@@ -24,14 +26,20 @@ export const getSummary = async () => {
   return apiClient.get('/summary')
 }
 
+// Get time-bucketed log/alert volume by severity, for the trend chart
+export const getTimeseries = async (hours = 24) => {
+  return apiClient.get(`/timeseries?hours=${hours}`)
+}
+
 // Get detection rules
 export const getRules = async () => {
   return apiClient.get('/rules')
 }
 
-// Get recent incidents
-export const getIncidents = async (hours = 24) => {
-  return apiClient.get(`/incidents?hours=${hours}`)
+// Get recent incidents. sortBy: 'timestamp' (default, newest first) or
+// 'risk' (highest risk_score first).
+export const getIncidents = async (hours = 24, sortBy = 'timestamp') => {
+  return apiClient.get(`/incidents?hours=${hours}&sort_by=${sortBy}`)
 }
 
 // Get recent alerts
@@ -66,6 +74,18 @@ export const startInvestigation = async (incidentId) => {
 // Resolve incident
 export const resolveIncident = async (incidentId, notes = '') => {
   return apiClient.put(`/incidents/${incidentId}/resolve`, { notes })
+}
+
+// Trigger a simulated SOAR response action (block_ip | disable_user | isolate_host).
+// Writes a record to the response_actions index only - never touches a
+// real firewall, IAM system, or host.
+export const respondToIncident = async (incidentId, action, target, notes = '') => {
+  return apiClient.post(`/incidents/${incidentId}/respond`, { action, target, notes })
+}
+
+// Get the simulated response-action history for an incident
+export const getIncidentResponses = async (incidentId) => {
+  return apiClient.get(`/incidents/${incidentId}/responses`)
 }
 
 // Update incident status

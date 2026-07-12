@@ -65,8 +65,8 @@ REQUIRED_FILES = [
     "detection-engine/engine.py", "correlation-engine/correlator.py",
     "ingestion/api-python/ai_agent/agent.py", "parser/normalizer.py",
     "docs/ARCHITECTURE.md", "docs/DETECTION_ENGINE.md", "docs/AI_SOC_AGENT.md",
-    "docs/ATTACK_REPLAY.md", "docs/INCIDENT_REPORTING.md", "docs/ROADMAP.md",
-    "docs/CASE_STUDY.md",
+    "docs/ATTACK_REPLAY.md", "docs/INCIDENT_REPORTING.md",
+    "docs/CASE_STUDY.md", "docs/RISK_SCORING.md",
     "assets/dashboard.png", "assets/alerts.png", "assets/incident-view.png",
     "assets/ai-rca.png", "assets/advanced-search.png", "assets/demo.gif",
 ]

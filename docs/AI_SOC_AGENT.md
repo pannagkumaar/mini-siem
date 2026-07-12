@@ -2,14 +2,25 @@
 
 `ingestion/api-python/ai_agent/agent.py` provides two capabilities:
 
-1. **Per-alert analysis** (`POST /ai/analyze/{alert_id}`) - existing feature, requires `GROQ_API_KEY`.
-2. **Per-incident root cause analysis** (`POST /ai/rca/{incident_id}`) - works with or without an API key.
+1. **Per-alert analysis** (`POST /ai/analyze/{alert_id}`) - requires an LLM provider key.
+2. **Per-incident root cause analysis** (`POST /ai/rca/{incident_id}`) - works with or without one.
 
 ## Two modes
 
-### LLM mode
+### LLM mode - multi-provider
 
-Used automatically when `GROQ_API_KEY` is set (in `.env` or the environment). Calls Groq's `llama-3.3-70b-versatile` with the incident's title, severity, attack chain, affected assets, MITRE techniques, and timeline, and asks for a JSON object with the RCA sections below. If the call fails or returns malformed JSON, the agent **automatically falls back to template mode** rather than erroring out.
+The agent auto-detects whichever LLM provider key is set in the environment, in this order (first match wins):
+
+| Provider | Env var | Default model |
+|---|---|---|
+| Groq | `GROQ_API_KEY` | `llama-3.3-70b-versatile` |
+| OpenAI | `OPENAI_API_KEY` | `gpt-4o-mini` |
+| Anthropic (Claude) | `ANTHROPIC_API_KEY` | `claude-3-5-haiku-20241022` |
+| Google Gemini | `GEMINI_API_KEY` | `gemini-1.5-flash` |
+
+Set `AI_PROVIDER` (`groq` / `openai` / `anthropic` / `gemini`) to force a specific one when more than one key is present, and `{PROVIDER}_MODEL` (e.g. `ANTHROPIC_MODEL`) to override the default model. See `.env.example`.
+
+Each provider speaks a different wire format under the hood (OpenAI-compatible chat completions for Groq/OpenAI, Anthropic's Messages API, Google's Generative Language API) - `_call_llm()` in `agent.py` dispatches to the right adapter and normalizes all of them down to plain text before the rest of the agent ever sees a response. If the call fails, times out, or returns malformed JSON, the agent **automatically falls back to template mode** rather than erroring out.
 
 ### Template mode (no API key required)
 
@@ -23,7 +34,8 @@ Both modes return the same shape:
 {
   "incident_id": "INC-...",
   "mode": "llm | template",
-  "ai_model": "llama-3.3-70b-versatile | template-fallback-v1",
+  "provider": "groq | openai | anthropic | gemini | null",
+  "ai_model": "llama-3.3-70b-versatile | template-fallback-v1 | ...",
   "generated_at": "ISO8601",
   "threat_summary": "...",
   "root_cause_analysis": "...",
@@ -50,8 +62,15 @@ RCAs are cached in the `ai_rca` OpenSearch index, keyed by `incident_id`, so rep
 import asyncio
 from ai_agent.agent import AISecurityAgent
 
-agent = AISecurityAgent(opensearch_client=None, groq_api_key=None)  # template mode
+agent = AISecurityAgent(opensearch_client=None)  # auto-detects a provider key, or template mode if none set
 rca = asyncio.run(agent.generate_incident_rca(my_incident_dict))
 ```
 
 `scripts/generate_incident_report.py --offline` does exactly this to produce `outputs/sample_ai_rca_report.md` without any live services.
+
+## Adding another provider
+
+1. Add an `LLMProviderConfig(name, env_var, api_url, default_model)` entry to `LLM_PROVIDERS` in `agent.py`.
+2. Add a `_call_<name>()` adapter that builds that provider's request shape and returns the plain-text completion.
+3. Wire it into the `if self.provider_name == "..."` dispatch in `_call_llm()`.
+4. Add the env var to `.env.example` and `docker-compose.yml`.

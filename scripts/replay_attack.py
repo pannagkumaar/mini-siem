@@ -23,7 +23,7 @@ import argparse
 import json
 import sys
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 import requests
@@ -63,7 +63,7 @@ class Clock:
     """
 
     def __init__(self, start: Optional[datetime] = None):
-        self.t = start or datetime.utcnow()
+        self.t = start or datetime.now(timezone.utc).replace(tzinfo=None)
 
     def tick(self, seconds: float = 5.0) -> str:
         self.t += timedelta(seconds=seconds)
